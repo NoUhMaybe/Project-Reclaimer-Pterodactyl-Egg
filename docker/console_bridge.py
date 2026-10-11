@@ -30,7 +30,7 @@ def main():
         print("Usage: console_bridge.py reclaimer-entrypoint start", file=sys.stderr)
         return 2
 
-    enabled = os.environ.get("RCON_ENABLED", "false").lower() == "true" and bool(os.environ.get("RCON_PASSWORD"))
+    enabled = os.environ.get("RCON_ENABLED", "0").lower() in ("1", "true") and bool(os.environ.get("RCON_PASSWORD"))
     child = subprocess.Popen(sys.argv[1:], stdin=subprocess.DEVNULL, start_new_session=True)
     stopping = False
 
