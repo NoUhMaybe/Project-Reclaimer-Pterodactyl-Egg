@@ -41,6 +41,20 @@ set -e
 
 cat "$WORKDIR/log.txt"
 
+# Regression guard: a restrictive-parent-directory permission bug (fixed by
+# `chmod 755 /home/reclaimer` in the Dockerfile; see TROUBLESHOOTING.md
+# "Verified upstream image metadata") previously made entrypoint.sh's
+# symlink validation fail for ANY non-root, non-UID-1000 user — including
+# this test's own --user flag above — before ever reaching asset
+# validation. That failure must never be confused with (or silently
+# replace) the actual missing-assets failure this test checks for below.
+if grep -q "is not the symlink this image's Dockerfile is supposed to create" "$WORKDIR/log.txt"; then
+    echo "FAIL: symlink validation failed under UID $(id -u):$(id -g) — this is the" >&2
+    echo "restrictive /home/reclaimer permission regression, not the missing-assets" >&2
+    echo "failure this test expects. See TROUBLESHOOTING.md." >&2
+    exit 1
+fi
+
 if [ "$exit_code" -eq 0 ]; then
     echo "FAIL: container exited 0 despite missing required game assets" >&2
     exit 1

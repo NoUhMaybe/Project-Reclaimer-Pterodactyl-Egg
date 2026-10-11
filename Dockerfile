@@ -72,10 +72,23 @@ RUN set -eux; \
 # a differently-assigned UID on another Wings node. The entrypoint
 # regenerates it fresh, as whatever UID Wings actually assigns, on each
 # server's own first start (one-time cost, see CONFIGURATION.md).
+#
+# Also relaxes /home/reclaimer itself to 755: upstream's `useradd
+# --create-home` leaves it 0700 (owner-only), which is fine for upstream's
+# own use but means ANY other UID — not just Wings' assigned one, every
+# UID except 1000 and root — gets "Permission denied" just traversing into
+# it, even to lstat() the .wine symlink below; that failure is
+# indistinguishable from the symlink not existing at all (see
+# TROUBLESHOOTING.md "Verified upstream image metadata" for how this was
+# confirmed directly from the image's own layer). 755 only grants
+# traverse/read, never write — nothing needs to be written directly under
+# /home/reclaimer, since Wine always resolves through the symlink to
+# /home/container/.wine-prefix for actual I/O.
 RUN rm -rf /server /cache /home/reclaimer/.wine \
     && ln -s /home/container/server /server \
     && ln -s /home/container/.cache/reclaimer /cache \
-    && ln -s /home/container/.wine-prefix /home/reclaimer/.wine
+    && ln -s /home/container/.wine-prefix /home/reclaimer/.wine \
+    && chmod 755 /home/reclaimer
 
 # Required by every Pterodactyl egg image. Safe alongside upstream's own
 # WINEPREFIX (an absolute path Wine always prefers over $HOME-relative

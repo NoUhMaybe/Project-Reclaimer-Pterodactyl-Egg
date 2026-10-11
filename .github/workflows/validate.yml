@@ -53,6 +53,7 @@ jobs:
           bash -n tests/test-runtime-b-configuration.sh
           bash -n tests/test-runtime-c-nonroot-fs.sh
           bash -n tests/test-runtime-d-full-startup.sh
+          bash -n tests/test-runtime-e-wine-prefix.sh
 
   shellcheck:
     runs-on: ubuntu-latest

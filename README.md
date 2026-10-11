@@ -68,11 +68,12 @@ reimplement its Wine/supervisor logic — see
 │   ├── test_egg.py                     # unittest: structural/schema validation of the egg JSON
 │   ├── test_config.py                  # unittest: configure.py unit + end-to-end tests
 │   ├── test_dockerfile.py              # unittest: static + live regression tests for the upstream ENTRYPOINT/CMD contract
-│   ├── test-runtime.sh                 # orchestrator: runs A/B/C, reports D as manual-only
+│   ├── test-runtime.sh                 # orchestrator: runs A/B/C/E, reports D as manual-only
 │   ├── test-runtime-a-missing-assets.sh
 │   ├── test-runtime-b-configuration.sh
 │   ├── test-runtime-c-nonroot-fs.sh
-│   └── test-runtime-d-full-startup.sh  # requires your own Halo 3 assets; never run in CI
+│   ├── test-runtime-d-full-startup.sh  # requires your own Halo 3 assets; never run in CI
+│   └── test-runtime-e-wine-prefix.sh   # Wine prefix init + persistence under a non-root UID; no game assets needed
 ├── .github/workflows/
 │   ├── validate.yml                    # JSON/schema, unit tests, shellcheck, separate docker-build + docker-runtime-tests jobs
 │   └── publish.yml                     # builds + pushes to GHCR — only on a version tag push or manual dispatch

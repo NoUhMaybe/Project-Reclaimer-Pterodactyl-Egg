@@ -12,10 +12,12 @@
 # than a permission error — proving the non-root path is reached safely.
 #
 # Does NOT exercise reclaimer-entrypoint prepare-prefix / a real Wine
-# prefix init under this UID (that needs the full Wine+Xvfb stack and
-# meaningful CPU/time, and validate-assets.sh intentionally exits before
-# reaching it — see entrypoint.sh). That remains covered only by Test D
-# with real game assets on a real Docker host.
+# prefix init under this UID (validate-assets.sh intentionally exits
+# before reaching it — see entrypoint.sh). That is covered separately by
+# tests/test-runtime-e-wine-prefix.sh (automated, no game assets needed,
+# but does run real Wine/Xvfb so it is kept as its own test rather than
+# folded in here) and, with a real game process, by
+# tests/test-runtime-d-full-startup.sh (manual, real assets required).
 #
 # Usage: IMAGE=<built image tag> ./tests/test-runtime-c-nonroot-fs.sh
 
@@ -71,6 +73,19 @@ exit_code=$?
 set -e
 
 cat "$WORKDIR/log.txt"
+
+# Regression guard: a restrictive-parent-directory permission bug (fixed by
+# `chmod 755 /home/reclaimer` in the Dockerfile; see TROUBLESHOOTING.md
+# "Verified upstream image metadata") previously made this exact check
+# fail for UID 2000, since /home/reclaimer was 0700 (owner UID 1000 only) —
+# lstat() on the .wine symlink returned EACCES, which entrypoint.sh's
+# `[ -L path ]` check cannot distinguish from the symlink not existing.
+if grep -q "is not the symlink this image's Dockerfile is supposed to create" "$WORKDIR/log.txt"; then
+    echo "FAIL: symlink validation failed under UID $TEST_UID:$TEST_GID — this is the" >&2
+    echo "restrictive /home/reclaimer permission regression, not the missing-assets" >&2
+    echo "failure this test expects. See TROUBLESHOOTING.md." >&2
+    exit 1
+fi
 
 if grep -qi "permission denied" "$WORKDIR/log.txt"; then
     echo "FAIL: a permission error occurred running as non-root UID $TEST_UID:$TEST_GID" >&2

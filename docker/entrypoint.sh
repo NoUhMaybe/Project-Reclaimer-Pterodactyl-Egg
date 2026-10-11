@@ -59,8 +59,12 @@ mkdir -p "$SERVER_DIR/game" "$SERVER_DIR/content/Maps" "$SERVER_DIR/content/Game
 for path in /server /cache /home/reclaimer/.wine; do
     if [ ! -L "$path" ]; then
         echo "ERROR: $path is not the symlink this image's Dockerfile is supposed to create." >&2
-        echo "This indicates the image was built incorrectly, or the upstream base image" >&2
-        echo "changed its own directory layout in a way this wrapper does not expect." >&2
+        echo "This indicates the image was built incorrectly, the upstream base image" >&2
+        echo "changed its own directory layout in a way this wrapper does not expect, or" >&2
+        echo "this path's parent directory denies traversal to the current UID (a failed" >&2
+        echo "lstat() looks identical to 'does not exist' to this check) — compare:" >&2
+        ls -ld "$(dirname "$path")" "$path" 2>&1 | sed 's/^/  /' >&2
+        echo "id: $(id)" >&2
         echo "See TROUBLESHOOTING.md 'Verified upstream image metadata'." >&2
         exit 1
     fi

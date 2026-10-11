@@ -93,6 +93,16 @@ class DockerfileStaticTests(unittest.TestCase):
         self.assertIn("ln -s /home/container/.cache/reclaimer /cache", self.dockerfile)
         self.assertIn("ln -s /home/container/.wine-prefix /home/reclaimer/.wine", self.dockerfile)
 
+    def test_home_reclaimer_permissions_are_relaxed(self):
+        # Regression guard: upstream's `useradd --create-home` leaves
+        # /home/reclaimer at mode 0700 (confirmed directly from the image's
+        # own layer — see TROUBLESHOOTING.md "Verified upstream image
+        # metadata"), which denies any UID other than 1000 or root even
+        # traversal into it — including Wings' assigned UID. That made the
+        # .wine symlink above unreachable (lstat() EACCES, indistinguishable
+        # from "does not exist") until this chmod was added.
+        self.assertIn("chmod 755 /home/reclaimer", self.dockerfile)
+
     def test_entrypoint_does_not_blindly_exec_dollar_at(self):
         # A bare `exec "$@"` with no explicit program name was the original
         # bug (CMD alone is just ["start"], not a runnable program).

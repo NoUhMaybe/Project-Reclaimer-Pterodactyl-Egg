@@ -29,6 +29,62 @@ and `project-reclaimer` as symlinks to it; the Wine prefix is initialized
 once at build time (`reclaimer-entrypoint prepare-prefix`, run as the
 `reclaimer` user, UID 1000) before the final image reverts to `USER root`.
 
+### `/home/reclaimer` permissions (and the symlink-validation regression this caused)
+
+CI run `38167643842` failed Tests A and C with:
+
+```
+ERROR: /home/reclaimer/.wine is not the symlink this image's Dockerfile is supposed to create.
+```
+
+despite the Dockerfile's `RUN ... && ln -s /home/container/.wine-prefix
+/home/reclaimer/.wine` succeeding at build time (confirmed: the image built
+fine, and this exact `RUN` step runs as root, which can always create the
+symlink regardless of any later permission concern). The real cause was
+confirmed by downloading the specific upstream layer that runs `useradd
+--create-home` (`docker/<repo>/blobs/sha256:07807a687f...`, found by
+matching layer sizes against the config's build `history`, exactly as
+described above) and inspecting it directly:
+
+```
+$ tar -tzvf useradd-layer.tar.gz
+drwxr-xr-x  0 0      0           0 ... home/
+drwx------  0 1000   1000        0 ... home/reclaimer/
+-rw-r--r--  0 1000   1000      220 ... home/reclaimer/.bash_logout
+...
+```
+
+`/home/reclaimer` is mode **0700** (owner-only — not the traditional 0755),
+owned by UID 1000. `rm -rf`/`ln -s` at build time runs as root, which
+bypasses all permission checks (`CAP_DAC_OVERRIDE`), so the symlink is
+created successfully regardless. But at *runtime*, Wings (and Tests A/C,
+deliberately) run as a UID that is neither 1000 nor root — and the kernel
+denies that UID even *traversal* into a 0700 directory it doesn't own.
+`entrypoint.sh`'s `[ -L "$path" ]` check calls `lstat()` on
+`/home/reclaimer/.wine`, which fails with `EACCES` before it can even see
+the symlink entry; bash's `-L` test (correctly, per POSIX) reports **false**
+on any `lstat()` failure, which is indistinguishable, from the test's
+boolean result alone, from the symlink not existing at all. `/server` and
+`/cache` never had this problem because their parent, `/`, is a normal
+`755 root:root` directory.
+
+This also meant `reclaimer-entrypoint`'s own `check_prefix_owner()` and
+`prepare-prefix` would have hit the identical `EACCES` the moment anything
+tried to actually resolve `$WINEPREFIX` under a non-root, non-1000 UID —
+this was never just our own validation check being overly strict.
+
+**Fix:** the Dockerfile now also runs `chmod 755 /home/reclaimer` in the
+same build-time `RUN` step that creates the symlinks. This only grants
+traversal/read to other UIDs — nothing needs to be *written* directly
+under `/home/reclaimer`, since Wine always resolves through the symlink to
+`/home/container/.wine-prefix` (Wings-owned, already writable) for actual
+I/O. The `[ -L path ]` check itself was correct all along and was not
+weakened or removed; see `tests/test_dockerfile.py`'s
+`test_home_reclaimer_permissions_are_relaxed` for a static regression
+guard, and the new `tests/test-runtime-e-wine-prefix.sh` for a live one
+that actually runs `reclaimer-entrypoint prepare-prefix` under a non-root
+UID end to end (not just the symlink check in isolation).
+
 The actual `reclaimer-entrypoint` script was also extracted from its own
 image layer and read directly (not reproduced verbatim here for
 cleanliness; its logic is summarized in README.md "How upstream's internals
@@ -107,10 +163,10 @@ Be precise about this before relying on the egg in production.
 
 ### NOT verified (requires a real Docker host / Wings node / game files)
 
-1. **The Dockerfile has never actually been built.** No Docker engine was
-   available in the environment this egg was authored in — only the
-   registry's HTTP API (for metadata) was reachable, not a local Docker
-   daemon. Before using this in production, run:
+1. **The Dockerfile builds successfully in real CI** (confirmed: GitHub
+   Actions runs `38166409350` and `38167643842` both built the image; see
+   below for what each of those runs then found and fixed at runtime).
+   Before using this in production, still run it yourself:
    ```bash
    docker build -t project-reclaimer-pterodactyl:test .
    ```
@@ -146,16 +202,30 @@ Be precise about this before relying on the egg in production.
    ownership itself, via the same throwaway-root-container technique,
    before asserting anything about permissions).
 
-2. **Non-root execution has been reasoned through in detail against the
-   actual extracted upstream script (see above) but never exercised in a
-   running container.** The logic strongly suggests the redesigned
-   Dockerfile/entrypoint (build-time symlinks + runtime `prepare-prefix`)
-   resolves the Wine-prefix-ownership failure that the original,
-   unmodified image would hit under Wings — but this is reasoning from
-   source, not an observed, passing test run. Run
-   `tests/test-runtime-c-nonroot-fs.sh` (automated, no game assets needed)
-   and, ideally, `tests/test-runtime-d-full-startup.sh` (manual, real
-   assets) on a real Docker host before production use.
+   A second real CI run (`38167643842`) then built successfully and passed
+   Test B, but Tests A and C both failed with "ERROR: /home/reclaimer/.wine
+   is not the symlink this image's Dockerfile is supposed to create." —
+   the `/home/reclaimer` permissions bug described in full under "Verified
+   upstream image metadata" above, now fixed (`chmod 755
+   /home/reclaimer`), with a new regression test
+   (`tests/test-runtime-e-wine-prefix.sh`) that actually runs
+   `reclaimer-entrypoint prepare-prefix` under a non-root UID end to end,
+   not just the symlink check in isolation. This fix has been committed
+   but **not yet re-verified against a real Docker daemon or a third CI
+   run** — see below.
+
+2. **Non-root execution of the symlink/filesystem setup itself has now
+   been exercised in real CI (`38167643842`, with a confirmed root cause
+   and fix — see above), and the `prepare-prefix` codepath specifically
+   has been reasoned through in detail against the actual extracted
+   upstream script, but a real end-to-end `prepare-prefix` run under a
+   non-root UID has not yet been confirmed to pass.** That is exactly what
+   the new `tests/test-runtime-e-wine-prefix.sh` checks, but it has not
+   yet been run against a real Docker daemon (none was available while
+   writing it). Run `tests/test-runtime-c-nonroot-fs.sh` and
+   `tests/test-runtime-e-wine-prefix.sh` (both automated, no game assets
+   needed) and, ideally, `tests/test-runtime-d-full-startup.sh` (manual,
+   real assets) on a real Docker host before production use.
 
 3. **No verified "server is ready" console string exists.** Neither the
    available Project Reclaimer documentation nor the extracted
@@ -206,7 +276,7 @@ admins should never need to change this field at all.
 
 | Symptom | Likely cause | What to check / do |
 | --- | --- | --- |
-| Container exits immediately with "ERROR: ... is not the symlink this image's Dockerfile is supposed to create" | The image was built from an older/modified Dockerfile, or upstream changed its own `/server`/`/cache` paths | Rebuild from the current Dockerfile; if upstream genuinely changed its layout, `tests/test_dockerfile.py`'s live tests will also start failing in CI and point at what changed |
+| Container exits immediately with "ERROR: ... is not the symlink this image's Dockerfile is supposed to create" | Historically (fixed, see "Verified upstream image metadata" → `/home/reclaimer` permissions): `/home/reclaimer` being mode 0700 denied any non-root, non-UID-1000 process even traversal, which looks identical to the symlink not existing. If this recurs: the image was built from an older/modified Dockerfile missing the `chmod 755 /home/reclaimer` fix, or upstream changed its own `/server`/`/cache`/`/home/reclaimer` layout | Rebuild from the current Dockerfile; run `tests/test-runtime-c-nonroot-fs.sh` or `-e-wine-prefix.sh` to confirm a non-root UID can actually reach these paths; if upstream genuinely changed its layout, `tests/test_dockerfile.py`'s live tests will also start failing in CI and point at what changed |
 | Container exits immediately with "the Wine prefix ... belongs to another user" | `reclaimer-entrypoint prepare-prefix` did not run, or `/home/container` is not actually writable by the UID Wings assigned (unexpected; check Wings itself) | Confirm `docker/entrypoint.sh` step 5 ran and succeeded in the log before this; if it's missing entirely, the image may not have rebuilt correctly |
 | Console shows "Required game assets are missing" and the server does not start | `game/halo3/halo3.dll` or `game/halo3/maps/shared.map` not uploaded | Upload them per INSTALL.md step 4; this is a deliberate hard failure, not a bug |
 | Console shows Wine errors (missing DLL, crash) | Runtime dependency missing inside the *runtime* Docker image, or corrupted/incomplete asset upload | Confirm the upload matches upstream's expected layout exactly (case-sensitive paths under `game/halo3/...`); re-run `dedicated init --from` and re-upload if unsure |
