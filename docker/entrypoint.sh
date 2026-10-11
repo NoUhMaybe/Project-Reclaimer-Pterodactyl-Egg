@@ -90,12 +90,18 @@ export RECLAIMER_DEDICATED_MAX_PLAYERS="${MAX_PLAYERS:-16}"
 export RECLAIMER_DEDICATED_MIN_PLAYERS="${MIN_PLAYERS:-1}"
 export RECLAIMER_DEDICATED_PASSWORD="${SERVER_PASSWORD:-}"
 export RECLAIMER_DEDICATED_PLAYLIST="${PLAYLIST:-}"
-export RECLAIMER_DEDICATED_AUTO_UPDATE="${AUTO_UPDATE:-false}"
+case "${AUTO_UPDATE:-0}" in
+    1|true) export RECLAIMER_DEDICATED_AUTO_UPDATE=true ;;
+    *) export RECLAIMER_DEDICATED_AUTO_UPDATE=false ;;
+esac
 export RECLAIMER_DEDICATED_ANTI_CHEAT="${ANTI_CHEAT:-enforce}"
-export RECLAIMER_DEDICATED_BLOCK_VPN="${BLOCK_VPN:-true}"
+case "${BLOCK_VPN:-1}" in
+    1|true) export RECLAIMER_DEDICATED_BLOCK_VPN=true ;;
+    *) export RECLAIMER_DEDICATED_BLOCK_VPN=false ;;
+esac
 
 # SERVER_PUBLIC=true (default) means the server IS listed -> hidden=false.
-if [ "${SERVER_PUBLIC:-true}" = "true" ]; then
+if [ "${SERVER_PUBLIC:-1}" = "1" ] || [ "${SERVER_PUBLIC:-1}" = "true" ]; then
     export RECLAIMER_DEDICATED_HIDDEN=false
 else
     export RECLAIMER_DEDICATED_HIDDEN=true
@@ -106,7 +112,7 @@ fi
 # every interface to be reachable through the published allocation. This
 # does not, by itself, make RCON safe to expose publicly — see
 # CONFIGURATION.md "RCON" for the host-firewall caveat.
-if [ "${RCON_ENABLED:-false}" = "true" ] && [ -n "${RCON_PASSWORD:-}" ]; then
+if { [ "${RCON_ENABLED:-0}" = "1" ] || [ "${RCON_ENABLED:-0}" = "true" ]; } && [ -n "${RCON_PASSWORD:-}" ]; then
     export RECLAIMER_DEDICATED_RCON_PASSWORD="${RCON_PASSWORD}"
     export RECLAIMER_DEDICATED_RCON_ADDRESS=127.0.0.1
 else

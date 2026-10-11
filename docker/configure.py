@@ -127,7 +127,7 @@ def main() -> int:
 
     # Local CLI RCON reads dedicated.toml; keep its credentials in sync with
     # the startup variables while preserving unrelated manual settings.
-    rcon_enabled = os.environ.get("RCON_ENABLED", "false").lower() == "true"
+    rcon_enabled = os.environ.get("RCON_ENABLED", "0").lower() in ("1", "true")
     rcon_password = os.environ.get("RCON_PASSWORD", "") if rcon_enabled else ""
     def sync_rcon(text: str) -> str:
         import re
