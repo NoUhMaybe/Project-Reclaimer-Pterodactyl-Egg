@@ -135,6 +135,13 @@ class EggStructureTests(unittest.TestCase):
         rcon = next(v for v in self.egg["variables"] if v["env_variable"] == "RCON_PASSWORD")
         self.assertIn("between:8,128", rcon["rules"])
 
+    def test_boolean_switches_accept_panel_values_and_legacy_values(self):
+        expected = {"SERVER_PUBLIC": "1", "AUTO_UPDATE": "0", "RCON_ENABLED": "0", "BLOCK_VPN": "1"}
+        for var in self.egg["variables"]:
+            if var["env_variable"] in expected:
+                self.assertEqual(var["default_value"], expected[var["env_variable"]])
+                self.assertEqual(var["rules"], "required|in:0,1,true,false")
+
     def test_no_puid_pgid_variables(self):
         # PUID/PGID are inert under Wings (see TROUBLESHOOTING.md); exposing
         # them as egg variables would be misleading.
