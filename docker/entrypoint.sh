@@ -108,7 +108,7 @@ fi
 # CONFIGURATION.md "RCON" for the host-firewall caveat.
 if [ "${RCON_ENABLED:-false}" = "true" ] && [ -n "${RCON_PASSWORD:-}" ]; then
     export RECLAIMER_DEDICATED_RCON_PASSWORD="${RCON_PASSWORD}"
-    export RECLAIMER_DEDICATED_RCON_ADDRESS=0.0.0.0
+    export RECLAIMER_DEDICATED_RCON_ADDRESS=127.0.0.1
 else
     export RECLAIMER_DEDICATED_RCON_PASSWORD=""
 fi
@@ -182,4 +182,4 @@ fi
 
 echo "Starting Project Reclaimer dedicated server: $PARSED"
 # shellcheck disable=SC2086
-exec $PARSED
+exec python3 /pterodactyl/console_bridge.py $PARSED
