@@ -1,33 +1,15 @@
 # Installation Guide
 
-## 1. Build and publish the Docker image
+## 1. Obtain the published Docker image
 
-The egg references `ghcr.io/nouhmaybe/project-reclaimer-pterodactyl:latest`.
-**Nothing has been published there yet** (see TROUBLESHOOTING.md) — build
-your own copy first, either to publish to that same registry (if you have
-access) or to point the egg's Docker Image field at your own registry.
+The exported egg targets `ghcr.io/nouhmaybe/project-reclaimer-pterodactyl:v0.1.0-dev.4`.
+This tag will become available when the corresponding prerelease is published.
+It is a testing release, not yet a stable version. You do **not** need to
+build the image yourself to install the egg once the tag has been published.
 
-```bash
-git clone <this repository>
-cd Project-Reclaimer-Pterodactyl-Egg
-docker build -t project-reclaimer-pterodactyl:local .
-```
-
-Verify the upstream base image tag first (also re-checked automatically by
-`tests/test_dockerfile.py`):
-
-```bash
-docker pull ghcr.io/projectreclaimer/project-reclaimer-dedicated:0.9.13
-```
-
-If that tag no longer exists, pass a current one:
-`--build-arg RECLAIMER_VERSION=<version>`.
-
-To publish to GHCR under this repository's own name, push a version tag
-(`git tag v0.1.0 && git push origin v0.1.0`) or run
-[`.github/workflows/publish.yml`](.github/workflows/publish.yml) manually
-from the Actions tab — see README.md "Publishing to GHCR" for exactly what
-that workflow does and when it does (and does not) run.
+Advanced users can build an image with `docker build -t project-reclaimer-pterodactyl:local .`.
+The upstream base image is pinned to version 0.9.13 by default.
+See [the publishing workflow](.github/workflows/publish.yml) for tagged releases.
 
 ## 2. Import the egg into Pterodactyl Panel
 
@@ -47,8 +29,8 @@ that workflow does and when it does (and does not) run.
    both the game (UDP) and, if enabled, RCON (TCP) — no additional
    allocations are required (see [CONFIGURATION.md](CONFIGURATION.md#networking)).
    Wings publishing this port through Docker is **not** the same as it being
-   reachable from the internet: also open the same UDP+TCP port number at
-   the Wings node's own OS firewall (e.g. `sudo ufw allow 49176` on Ubuntu)
+   reachable from the internet: allow **UDP** on the Wings node's own OS firewall
+   (e.g. `sudo ufw allow 49176/udp` on Ubuntu), and forward UDP on the router
    and in any upstream cloud/provider security group, or players on the
    public internet will not be able to join even though the server runs fine.
 3. Set resource limits (see README.md "Resource recommendations"); 2 vCPU /
@@ -58,8 +40,8 @@ that workflow does and when it does (and does not) run.
    [CONFIGURATION.md](CONFIGURATION.md) for the full reference.
 5. Click **Create**. The install container will run
    [`scripts/install.sh`](scripts/install.sh), creating the persistent
-   directory skeleton under the server's file manager (`game/`, `content/`,
-   `playlists/`, `data/`, `bans.json`).
+   directory skeleton under the server's file manager (`server/game/`, `server/content/`,
+   `server/playlists/`, `server/data/`, `server/bans.json`).
 
 ## 4. Upload your Halo 3 game assets
 
@@ -82,15 +64,15 @@ specific maps, or `--maps campaign` to include the full campaign for
 campaign co-op.
 
 Then upload the resulting `game/` folder's **contents** into this server's
-`game/` folder via SFTP (credentials are on the server's Panel page) or the
+`server/game/` folder via SFTP (credentials are on the server's Panel page) or the
 Pterodactyl File Manager, preserving the folder structure:
 
 ```
-game/halo3/halo3.dll
-game/halo3/maps/shared.map
-game/halo3/maps/<MapName>.map   (one per map you host)
-game/halo3/maps/campaign.map    (optional)
-game/halo3/maps/040_voi.map     (optional)
+server/game/halo3/halo3.dll
+server/game/halo3/maps/shared.map
+server/game/halo3/maps/<MapName>.map   (one per map you host)
+server/game/halo3/maps/campaign.map    (optional)
+server/game/halo3/maps/040_voi.map     (optional)
 ```
 
 ### Manual alternative
@@ -109,7 +91,7 @@ features depending on them will not work until you upload them.
 ## 5. Set a playlist or map, then start
 
 - To run a playlist, upload your `.playlist.json` file into this server's
-  `playlists/` folder and set the **Playlist** variable to its path, e.g.
+  `server/playlists/` folder and set the **Playlist** variable to its path, e.g.
   `playlists/community.playlist.json`.
 - To run a single map/game type instead, leave Playlist blank and set
   **Map** / **Game Type** (e.g. `Guardian` / `Slayer`).
@@ -131,3 +113,29 @@ your server's name (public servers appear automatically within about a
 minute of starting, via the project's public master servers). Alternatively
 use **Direct Connect** with the node's public IP/DNS name and the port you
 assigned.
+
+## 7. Interactive web-console commands
+
+To administer the live server from the Pterodactyl Console tab, set
+**Enable RCON** to `true` and set a strong **RCON Password** (8–128 characters)
+under Startup, then restart the server. RCON binds to `127.0.0.1` **inside
+the container only**; do not forward the TCP game allocation to the internet.
+
+Run `help`, `maps`, `modes`, `players`, `load Valhalla Slayer`,
+`load "The Pit" "Capture the Flag"`, `nextmap Guardian Slayer`,
+or `help nextmap` in the Pterodactyl Console command field.
+The bridge runs the upstream `dedicated rcon` CLI and returns its output.
+RCON map-changing commands can **queue** a game for the next lobby rather
+than immediately loading it. `startvote playlist` requires an active playlist.
+
+The normal Stop and Start buttons were verified on Wings with `v0.1.0-dev.3`.
+Only administrators with console access should have command privileges.
+
+## Verified deployment and remaining limitations
+
+On one Ubuntu Wings node, the image has started under a non-root UID, loaded
+Halo 3 assets, hosted a complete Guardian Slayer match including next-round
+rotation, and accepted interactive RCON commands. Stop and restart were
+also verified with the `dev.3` console bridge. **Not yet verified:** external
+WAN connectivity, a fresh import/install on a separate server, multiple
+simultaneous players, and public server-browser discovery.
