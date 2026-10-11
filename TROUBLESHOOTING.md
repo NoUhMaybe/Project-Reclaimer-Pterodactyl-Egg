@@ -1,3 +1,21 @@
+> **2026-10-11 live-testing update:** The historical notes below describe
+> development-stage assumptions and failures and may contain superseded
+> "not tested" statements. Current verified status: `v0.1.0-dev.3`
+> succeeded on a real Wings node with LAN gameplay, a complete Guardian
+> Slayer match, local RCON via the Pterodactyl Console, and graceful
+> Stop/Start. Still unverified: WAN, multiple simultaneous clients, public
+> server listing, independent fresh install. See [README.md](README.md)
+> and [CONFIGURATION.md](CONFIGURATION.md) for current operation.
+>
+> For the current non-root Wine-prefix ownership fix, use
+> `WINEPREFIX=/home/container/.wine-prefix` and ensure the directory owner
+> matches the Wings container UID/GID. The old `/home/reclaimer/.wine`
+> symlink ownership failure was fixed in `v0.1.0-dev.2`.
+> Local-only RCON (TCP 127.0.0.1 inside the container) and stdin bridging
+> were introduced in `v0.1.0-dev.3`. The appearance of
+> `X connection to :0 broken` on graceful shutdown was observed alongside
+> `All servers stopped` and is not by itself proof of a crash.
+
 # Troubleshooting
 
 ## Verified upstream image metadata

@@ -5,18 +5,13 @@ egg that runs [Project Reclaimer](https://projectreclaimer.dev/) — a
 community-developed Halo 3 dedicated multiplayer server — under
 [Pterodactyl](https://pterodactyl.io/) Panel 1.x / Wings 1.x.
 
-> **Status: implemented, statically validated, and checked against the real
-> upstream image's published metadata — not yet live-tested against a real
-> Wings node.** Docker was not available in the development environment this
-> egg was revised in, so the Dockerfile/image has not actually been built or
-> run. However, its design is no longer guesswork: the upstream image's exact
-> `Entrypoint`/`Cmd`/`User`/`WorkingDir`/`Env` and its actual entrypoint
-> script were fetched directly from the published image on `ghcr.io` (via the
-> registry HTTP API, no `docker pull` required) and used to correct two
-> previously-unverified assumptions — see
-> [TROUBLESHOOTING.md](TROUBLESHOOTING.md#what-has-and-has-not-been-tested)
-> for exactly what is and isn't verified before you rely on this in
-> production.
+> **Status: development prerelease with successful live Wings testing.**
+> Image `v0.1.0-dev.3` was verified on an Ubuntu Wings node: game assets
+> validated, Guardian Slayer match played to completion and automatically
+> repeated, local player joined, Pterodactyl Console RCON commands succeeded,
+> and clean Stop/Start worked. The `v0.1.0-dev.4` egg is being prepared for
+> wider testing. Fresh-install, external WAN, public listing, and multiplayer
+> with more than one client still need verification.
 
 ## What this is
 
@@ -30,7 +25,7 @@ volumes for a standard egg, and its working directory convention
 This repository builds a **thin compatibility image** on top of the
 official, unmodified upstream image, adapting only what Wings requires:
 
-- a wrapper entrypoint that symlinks `/server` and `/cache` onto
+- build-time symlinks mapping `/server` and `/cache` into
   `/home/container` (Wings' single persistent volume) so data survives
   restarts without extra volumes,
 - translation of Pterodactyl egg variables into upstream's own
@@ -53,7 +48,8 @@ reimplement its Wine/supervisor logic — see
 ├── egg-project-reclaimer.json          # the importable PTDL_v2 egg (generated, see tools/build_egg.py)
 ├── Dockerfile                          # thin wrapper FROM the official upstream image
 ├── docker/
-│   ├── entrypoint.sh                   # baked into the image; adapts paths, generates config, hands off to upstream
+│   ├── entrypoint.sh                   # baked into the image; adapts paths and starts supervised server
+│   ├── console_bridge.py               # Pterodactyl stdin commands -> local RCON
 │   ├── configure.py                    # dedicated.toml sentinel-block generator/patcher
 │   └── validate-assets.sh              # checks for required Halo 3 files before start
 ├── scripts/
@@ -142,21 +138,19 @@ placeholder).
 
 See [INSTALL.md](INSTALL.md) for the full walkthrough. Summary:
 
-1. Build and push the compatibility image (see below), or point the egg at
-   your own registry.
+1. Use the published versioned compatibility image or build your own.
 2. Import [`egg-project-reclaimer.json`](egg-project-reclaimer.json) into a
    Nest in your Panel.
-3. Edit the egg's Docker Image to your published image.
+3. Verify the egg's Docker Image is a published tag (currently v0.1.0-dev.4 when released).
 4. Create a server, set its variables, upload your own legally-owned Halo 3
    files, and start it.
 
 ### Building and publishing the image
 
-The egg references `ghcr.io/nouhmaybe/project-reclaimer-pterodactyl:latest`
-(the preferred destination for this repository), but **nothing has been
-published there yet** — no image has been pushed, and package publishing
-requires an explicit, authorized action (see below). Until you publish one
-yourself, build locally first:
+The egg references `ghcr.io/nouhmaybe/project-reclaimer-pterodactyl:v0.1.0-dev.4`
+for the upcoming development prerelease. Previous development images are
+already published to GHCR. For a normal installation, pull the published
+tag; local builds are optional.
 
 ```bash
 docker build -t project-reclaimer-pterodactyl:local .
@@ -258,3 +252,23 @@ for the full multiplayer map set, +~4 GB more for the full campaign).
 
 See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for the full list of unresolved
 and unverified items that remain before this can be called production-ready.
+
+## Interactive administration from Pterodactyl
+
+With `RCON_ENABLED=true` and a strong `RCON_PASSWORD`, the existing web
+Console tab accepts `help`, `maps`, `modes`, `players`,
+`load Valhalla Slayer`, `nextmap Guardian Slayer`, and other documented
+Project Reclaimer RCON commands. The console bridge binds RCON to container
+loopback (`127.0.0.1`), not the public TCP interface. Use UDP port forwarding
+for game clients. See [CONFIGURATION.md](CONFIGURATION.md#rcon-and-the-interactive-pterodactyl-console).
+
+## Live test status
+
+- **Verified:** non-root startup, persistent Wine prefix, game assets,
+  complete Guardian Slayer match and automatic next game, LAN client,
+  live RCON commands, graceful Stop and Start on `v0.1.0-dev.3`.
+- **Not yet verified:** multiple simultaneous players, remote WAN clients,
+  public browser listing, and clean independent first install from the
+  published egg.
+- **Assets:** never included or redistributed. Copy licensed Halo 3 files
+  into `server/game/halo3/` in the Pterodactyl File Manager.

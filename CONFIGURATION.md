@@ -23,7 +23,7 @@ port = ...
 # <<< PTERODACTYL MANAGED SERVER BLOCK <<<
 ```
 
-**Everything outside that block is yours.** Edit `dedicated.toml` by hand
+**Most configuration outside that block is yours, except the `[rcon]` password and address fields, which are synchronized from Startup variables on each launch.** Edit `dedicated.toml` by hand
 (via SFTP or the File Manager) for anything not covered by an egg variable
 — custom `admins`, `[rcon]`/`[master]` tuning beyond what's exposed, etc.
 Your edits are preserved across restarts and reinstalls.
@@ -84,8 +84,8 @@ directly for `[[server]].port`; there is no separate egg variable for it.
   auto-detects it via an outbound request (to `api.ipify.org`) — this
   *should* still resolve to the Wings node's real public IP even though the
   container itself is on an isolated bridge network, because outbound NAT
-  normally preserves the host's public IP as seen by the destination. This
-  reasoning has **not been confirmed on a live Wings node** — see
+  normally preserves the host's public IP as seen by the destination. Public IP auto-detection was observed in live Wings logs, but remote
+  reachability has **not** been confirmed — see
   TROUBLESHOOTING.md. If your server is not visible in the browser with its
   correct address, try setting it explicitly via a custom `dedicated.toml`
   edit outside the managed block, or via `RECLAIMER_DEDICATED_PUBLIC_ADDRESS`
@@ -113,32 +113,31 @@ directly for `[[server]].port`; there is no separate egg variable for it.
   running a subset of servers from one shared `dedicated.toml`) since each
   Pterodactyl instance already maps 1:1 to one Project Reclaimer server.
 
-## RCON
+## RCON and the interactive Pterodactyl console
 
-- Disabled by default (`RCON_ENABLED=false`, empty password).
-- When enabled, the console listens on `0.0.0.0` at the assigned port
-  (required for it to be reachable through Wings' bridge networking /
-  published allocation) rather than upstream's default `127.0.0.1`
-  (which only makes sense with `network_mode: host`).
-- **RCON is unencrypted** (per upstream docs). Listening on `0.0.0.0` means
-  it is reachable by anyone who can reach the allocated TCP port at all —
-  **Pterodactyl's allocation system is not, by itself, a firewall**; it
-  only maps a port through Docker. Whether that port is actually reachable
-  from the public internet depends entirely on the Wings host's own OS
-  firewall and any upstream cloud/provider security group, neither of
-  which this egg configures. Treat RCON like any other admin interface:
-  use a strong, unique password, and restrict the allocated port at the
-  host/network firewall to known admin IP ranges wherever possible, rather
-  than relying on the password alone.
-- To connect without exposing it further, use an SSH tunnel to the Wings
-  node: `ssh -L 49176:127.0.0.1:49176 you@wings-node`, then point your RCON
-  tool at `127.0.0.1:49176` — this only works as a real restriction if you
-  *also* block the public-facing TCP port at the host firewall, since the
-  same port is still published by Docker for the game's own UDP traffic
-  regardless of whether RCON is enabled.
-- End-to-end RCON connectivity (a real client successfully authenticating
-  and running commands through a live Wings-managed container) has **not
-  been tested** — see TROUBLESHOOTING.md.
+- Disabled by default. Set `RCON_ENABLED=true` and supply an 8–128 character
+  `RCON_PASSWORD` in the server Startup variables to enable the console bridge.
+- The current implementation binds RCON to **127.0.0.1 inside the container**
+  on the same port number as the game (TCP for RCON, UDP for gameplay).
+  It is **not** intended as a public TCP service. Never forward TCP RCON
+  to the internet; open UDP for public gameplay as required.
+- `docker/configure.py` synchronizes `[rcon].password` and `[rcon].address`
+  in `server/dedicated.toml` on startup so the upstream `dedicated rcon`
+  client can authenticate locally. Manual edits to these two keys are
+  overridden; unrelated configuration is preserved.
+- The `docker/console_bridge.py` process supervises the dedicated server,
+  relays Pterodactyl stdin commands via `dedicated rcon`, prints responses,
+  and forwards the Stop control to the server as SIGINT.
+- Commands: `help`, `maps`, `modes`, `players`,
+  `load Valhalla Slayer`, `load "The Pit" "Capture the Flag"`,
+  `nextmap Guardian Slayer`, `help nextmap`, `vote`.
+  Use `help <command>` for upstream command-specific guidance.
+- Commands can be queued for the next lobby. The playlist ballot
+  (`startvote playlist`) requires an **active playlist**. Other votes
+  depend on player count and game state.
+- Wings `v0.1.0-dev.3` live testing confirmed `maps`, `modes`,
+  `players`, queueing `load`, graceful Stop and successful Start.
+  These do not yet establish multi-client public network compatibility.
 
 ## First boot and the Wine prefix
 
@@ -156,10 +155,10 @@ server's storage is wiped (e.g. a full reinstall).
 
 ## Playlists, maps, and mods
 
-- Upload playlist files to `playlists/` in the file manager and reference
+- Upload playlist files to `server/playlists/` in the file manager and reference
   them by path in the **Playlist** variable.
-- Upload shared content (saved maps, game types, mods) to `content/Maps`,
-  `content/Game Modes`, `content/Mods` respectively.
+- Upload shared content (saved maps, game types, mods) to `server/content/Maps`,
+  `server/content/Game Modes`, `server/content/Mods` respectively.
 - Mods are **not** downloadable from Steam Workshop by this image (upstream
   has no Steam client inside the Docker image); copy mod folders in by hand
   as documented upstream ("Workshop downloads in Docker").
@@ -171,8 +170,7 @@ server's storage is wiped (e.g. a full reinstall).
   **not** update this Docker image or MCC/Halo 3.
 - To move to a newer/older upstream release of the **image itself**,
   rebuild with a different `RECLAIMER_VERSION` build arg (see INSTALL.md)
-  and change the egg's Docker Image field (or push the new tag over
-  `latest` and have Wings re-pull it).
+  and change the egg's Docker Image field (and publish a new immutable versioned image tag).
 - Your `dedicated.toml`, playlists, bans, and uploaded assets are never
   touched by an image update — only `/home/container` is persistent, and
   neither install nor the entrypoint ever deletes existing files there.
