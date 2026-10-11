@@ -118,7 +118,33 @@ Be precise about this before relying on the egg in production.
    result. CI (`.github/workflows/validate.yml`) does this on every push,
    but a failure there due to the base image being rate-limited from
    GitHub's runners is a known possibility, not necessarily a Dockerfile
-   bug — check the error message.
+   bug — check the error message. The build and runtime-test steps are
+   separate jobs (`docker-build` and `docker-runtime-tests`), specifically
+   so a Dockerfile/pull problem and a runtime test failure are never
+   conflated into one ambiguous result.
+
+   The first real CI run against this repository (GitHub Actions run
+   `38166409350`) did build successfully and Test A's own assertions did
+   pass, but its cleanup trap then failed with "Permission denied" trying
+   to remove files the container had written as root inside its
+   bind-mounted temp directory, using the unprivileged runner's own UID —
+   and because the three runtime tests were invoked as separate sequential
+   `run:` lines, that one failure aborted the whole step before Tests B
+   and C ever got to execute. Fixed: `tests/lib/cleanup.sh`'s `safe_rm_rf`
+   removes files via a throwaway root container when a plain host-side
+   `rm -rf` fails (root inside a standard container can always remove
+   files regardless of which UID wrote them); Tests A and B now also run
+   the container under test as the calling user's own UID so this
+   fallback is rarely needed for them in the first place; and CI now
+   invokes `tests/test-runtime.sh` (which runs A, then B, then C,
+   unconditionally) instead of three independent steps that could abort
+   the run partway through. While fixing this, a related, previously
+   unexercised bug in Test C was also found and fixed: it asserted a
+   specific non-root UID could write into the bind mount without first
+   making that UID actually own it (Wings always chowns a server's real
+   volume before starting its container; the test now primes the same
+   ownership itself, via the same throwaway-root-container technique,
+   before asserting anything about permissions).
 
 2. **Non-root execution has been reasoned through in detail against the
    actual extracted upstream script (see above) but never exercised in a

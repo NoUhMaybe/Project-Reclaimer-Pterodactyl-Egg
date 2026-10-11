@@ -47,6 +47,7 @@ jobs:
           bash -n docker/entrypoint.sh
           bash -n docker/validate-assets.sh
           bash -n scripts/install.sh
+          bash -n tests/lib/cleanup.sh
           bash -n tests/test-runtime.sh
           bash -n tests/test-runtime-a-missing-assets.sh
           bash -n tests/test-runtime-b-configuration.sh
@@ -57,39 +58,57 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # ubuntu-latest runner images ship shellcheck preinstalled; calling it
+      # directly avoids depending on a third-party Action (the previous
+      # ludeeus/action-shellcheck@master — floating, unpinned, and last
+      # released in 2023 — was the source of this workflow's Node 20
+      # deprecation warnings).
       - name: Run ShellCheck
-        uses: ludeeus/action-shellcheck@master
-        with:
-          scandir: "."
-          ignore_paths: ".git"
+        run: |
+          shellcheck --version
+          find . -path ./.git -prune -o -name '*.sh' -print0 \
+            | xargs -0 shellcheck
 
-  docker-build-and-integration-test:
+  docker-build:
     runs-on: ubuntu-latest
-    # Builds the wrapper image to catch Dockerfile syntax errors and
-    # confirm the upstream base image is pullable, then runs the
-    # automatable runtime tests (A/B/C — no game assets required) against
-    # it. Never pushes anywhere; publishing is a deliberate, separate,
+    # Builds the wrapper image to catch Dockerfile errors and confirm the
+    # upstream base image is pullable. Deliberately a separate job from
+    # docker-runtime-tests below (rather than one combined, continue-on-
+    # error-masked step) so a Dockerfile/build failure and a runtime test
+    # failure show up as two distinct, honestly-reported check results.
+    # Never pushes anywhere; publishing is a deliberate, separate,
     # tag/manually-triggered workflow (see .github/workflows/publish.yml
     # and README.md "Publishing the image").
     steps:
       - uses: actions/checkout@v4
       - name: Build image
-        id: build
         run: docker build -t project-reclaimer-pterodactyl:ci .
-        continue-on-error: true
+      - name: Save image for the runtime-tests job
+        run: docker save project-reclaimer-pterodactyl:ci -o /tmp/project-reclaimer-pterodactyl-ci.tar
+      - uses: actions/upload-artifact@v4
+        with:
+          name: project-reclaimer-pterodactyl-ci-image
+          path: /tmp/project-reclaimer-pterodactyl-ci.tar
+          retention-days: 1
+
+  docker-runtime-tests:
+    needs: docker-build
+    runs-on: ubuntu-latest
+    # Runs the automatable runtime tests (A/B/C — no game assets required)
+    # against the image docker-build just produced. This job failing means
+    # the image builds fine but behaves incorrectly at runtime, which is a
+    # materially different signal than docker-build failing outright.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: project-reclaimer-pterodactyl-ci-image
+          path: /tmp
+      - name: Load image
+        run: docker load -i /tmp/project-reclaimer-pterodactyl-ci.tar
       - name: Run runtime tests A/B/C
-        if: steps.build.outcome == 'success'
         env:
           IMAGE: project-reclaimer-pterodactyl:ci
         run: |
           chmod +x tests/test-runtime*.sh
-          tests/test-runtime-a-missing-assets.sh
-          tests/test-runtime-b-configuration.sh
-          tests/test-runtime-c-nonroot-fs.sh
-      - name: Note on build result
-        if: steps.build.outcome != 'success'
-        run: |
-          echo "If the build step above failed, check whether it was a Dockerfile"
-          echo "problem (should be fixed) or an inability to pull the private/rate"
-          echo "limited upstream base image from this runner (a known, documented"
-          echo "limitation - see TROUBLESHOOTING.md)."
+          tests/test-runtime.sh

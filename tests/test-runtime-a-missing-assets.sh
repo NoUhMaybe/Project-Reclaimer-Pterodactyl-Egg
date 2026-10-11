@@ -12,15 +12,26 @@
 set -euo pipefail
 
 IMAGE="${IMAGE:?set IMAGE=<built image tag> before running this script}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=tests/lib/cleanup.sh
+source "$SCRIPT_DIR/lib/cleanup.sh"
+
 CONTAINER_NAME="reclaimer-test-a-$$"
 WORKDIR="$(mktemp -d)"
-trap 'docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true; rm -rf "$WORKDIR"' EXIT
+trap 'docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true; safe_rm_rf "$WORKDIR" "$IMAGE"' EXIT
 
 mkdir -p "$WORKDIR/home-container"
 
 echo "==> Running $IMAGE with no game assets uploaded"
+# Run as the calling user's own UID/GID rather than the image's default
+# (root): this is not what Test A is about (Test C covers non-root
+# behavior specifically), and it means any files the container writes
+# into the bind mount are already owned by whoever is running this
+# script, so the cleanup above never needs its container-based fallback
+# for this test in the common case.
 set +e
 docker run --name "$CONTAINER_NAME" \
+    --user "$(id -u):$(id -g)" \
     -e SERVER_NAME="Test A Server" \
     -e SERVER_PORT=49176 \
     -v "$WORKDIR/home-container:/home/container" \

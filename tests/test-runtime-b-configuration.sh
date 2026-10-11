@@ -12,12 +12,21 @@
 set -euo pipefail
 
 IMAGE="${IMAGE:?set IMAGE=<built image tag> before running this script}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=tests/lib/cleanup.sh
+source "$SCRIPT_DIR/lib/cleanup.sh"
+
 WORKDIR="$(mktemp -d)"
-trap 'rm -rf "$WORKDIR"' EXIT
+trap 'safe_rm_rf "$WORKDIR" "$IMAGE"' EXIT
 mkdir -p "$WORKDIR/home-container"
 
 run_configure() {
+    # Run as the calling user's own UID/GID (configure.py doesn't care
+    # which UID runs it) so dedicated.toml is written with an owner this
+    # script can always clean up directly, without needing cleanup.sh's
+    # container-based fallback in the common case.
     docker run --rm \
+        --user "$(id -u):$(id -g)" \
         --entrypoint python3 \
         -v "$WORKDIR/home-container:/home/container" \
         -e SERVER_NAME="$1" \

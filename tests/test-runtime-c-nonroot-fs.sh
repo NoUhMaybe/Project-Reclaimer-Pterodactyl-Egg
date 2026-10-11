@@ -22,15 +22,42 @@
 set -euo pipefail
 
 IMAGE="${IMAGE:?set IMAGE=<built image tag> before running this script}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=tests/lib/cleanup.sh
+source "$SCRIPT_DIR/lib/cleanup.sh"
+
 # Deliberately not 0, not 1000 (upstream's baked-in "reclaimer" UID), and
 # not whatever UID owns files on the host running this script.
 TEST_UID=2000
 TEST_GID=2000
 CONTAINER_NAME="reclaimer-test-c-$$"
 WORKDIR="$(mktemp -d)"
-trap 'docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true; rm -rf "$WORKDIR"' EXIT
+# This test deliberately runs the container as a UID that will essentially
+# never match whoever is running this script (e.g. the CI runner), so the
+# files it creates cannot be removed with a plain host-side `rm -rf` —
+# safe_rm_rf's container-based fallback (root inside a throwaway
+# container, which can remove any UID's files) is required here, not just
+# a nice-to-have as in Tests A/B.
+trap 'docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true; safe_rm_rf "$WORKDIR" "$IMAGE"' EXIT
 
 mkdir -p "$WORKDIR/home-container"
+
+# A freshly created host directory is owned by whoever is running this
+# script (e.g. the CI runner), not by $TEST_UID:$TEST_GID. Wings always
+# chowns a server's real volume to the exact UID/GID it is about to run
+# the container as *before* starting it — without doing the same here,
+# $TEST_UID would hit a genuine (and misleading) "Permission denied"
+# writing into a directory it does not own, which is not what this test
+# is meant to check. A regular (non-root) user cannot `chown` to an
+# arbitrary UID it doesn't own, so this runs as root inside a throwaway
+# container instead, exactly like safe_rm_rf's cleanup fallback does.
+echo "==> Priming the bind mount's ownership to $TEST_UID:$TEST_GID (as Wings would)"
+docker run --rm \
+    --user root \
+    --entrypoint chown \
+    -v "$WORKDIR/home-container:/target" \
+    "$IMAGE" \
+    -R "$TEST_UID:$TEST_GID" /target
 
 echo "==> Running $IMAGE as non-root UID:GID $TEST_UID:$TEST_GID, no game assets"
 set +e

@@ -63,6 +63,8 @@ reimplement its Wine/supervisor logic — see
 ├── config/
 │   └── dedicated.toml.example          # annotated reference, not used directly at runtime
 ├── tests/
+│   ├── lib/
+│   │   └── cleanup.sh                  # shared safe_rm_rf() helper: removes root/other-UID-owned test artifacts reliably
 │   ├── test_egg.py                     # unittest: structural/schema validation of the egg JSON
 │   ├── test_config.py                  # unittest: configure.py unit + end-to-end tests
 │   ├── test_dockerfile.py              # unittest: static + live regression tests for the upstream ENTRYPOINT/CMD contract
@@ -72,7 +74,7 @@ reimplement its Wine/supervisor logic — see
 │   ├── test-runtime-c-nonroot-fs.sh
 │   └── test-runtime-d-full-startup.sh  # requires your own Halo 3 assets; never run in CI
 ├── .github/workflows/
-│   ├── validate.yml                    # JSON/schema, unit tests, shellcheck, docker build + A/B/C on every push/PR
+│   ├── validate.yml                    # JSON/schema, unit tests, shellcheck, separate docker-build + docker-runtime-tests jobs
 │   └── publish.yml                     # builds + pushes to GHCR — only on a version tag push or manual dispatch
 ├── README.md / INSTALL.md / CONFIGURATION.md / TROUBLESHOOTING.md
 └── LICENSE
