@@ -83,7 +83,7 @@ def build() -> dict:
             "When enabled, the server reports to the public master server list (Server Browser). Disable to require Direct Connect.",
             "SERVER_PUBLIC",
             "true",
-            "required|boolean",
+            "required|in:true,false",
         ),
         variable(
             "Playlist",
@@ -111,14 +111,14 @@ def build() -> dict:
             "Let the server update Project Reclaimer itself on start and hourly (does not update this Docker image or MCC). Interrupts games in progress when it updates.",
             "AUTO_UPDATE",
             "false",
-            "required|boolean",
+            "required|in:true,false",
         ),
         variable(
             "Enable RCON",
             "Turn on the password-protected remote console. Requires RCON Password to also be set.",
             "RCON_ENABLED",
             "false",
-            "required|boolean",
+            "required|in:true,false",
         ),
         variable(
             "RCON Password",
@@ -139,7 +139,7 @@ def build() -> dict:
             "Refuse players connecting through a known VPN, proxy or hosting provider.",
             "BLOCK_VPN",
             "true",
-            "required|boolean",
+            "required|in:true,false",
         ),
     ]
 

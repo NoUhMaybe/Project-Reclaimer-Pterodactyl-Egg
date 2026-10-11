@@ -18,9 +18,9 @@ echo "-----------------------------------------------------------"
 echo " Project Reclaimer — Pterodactyl install script"
 echo "-----------------------------------------------------------"
 
-SERVER_DIR="/mnt/server"
+SERVER_DIR="/mnt/server/server"
 
-if [ ! -d "$SERVER_DIR" ]; then
+if [ ! -d /mnt/server ]; then
     echo "ERROR: $SERVER_DIR does not exist (expected Pterodactyl install mount)." >&2
     exit 1
 fi
@@ -52,14 +52,14 @@ Project Reclaimer requires your own legally-owned copy of Halo 3 from
 Halo: The Master Chief Collection. No game files are included with this
 egg or with Project Reclaimer itself.
 
-Upload the following into this server's "game" folder via SFTP or the
-Pterodactyl File Manager, preserving the folder structure shown:
+Upload the following into this server's "server/game" folder via SFTP
+or the Pterodactyl File Manager, preserving the folder structure shown:
 
-  game/halo3/halo3.dll                     (required)
-  game/halo3/maps/shared.map               (required)
-  game/halo3/maps/<MapName>.map            (one per map you want to host)
-  game/halo3/maps/campaign.map             (optional: Forge campaign vehicles/AI)
-  game/halo3/maps/040_voi.map              (optional: Forge campaign vehicles/AI)
+  server/game/halo3/halo3.dll                     (required)
+  server/game/halo3/maps/shared.map               (required)
+  server/game/halo3/maps/<MapName>.map            (one per map you want to host)
+  server/game/halo3/maps/campaign.map             (optional: Forge campaign vehicles/AI)
+  server/game/halo3/maps/040_voi.map              (optional: Forge campaign vehicles/AI)
 
 See INSTALL.md in the egg repository for the full, up to date list and
 step-by-step instructions, including how to copy these files from a
