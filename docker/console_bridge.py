@@ -17,7 +17,7 @@ def parse_command(line):
         return None
     if line.lower() in ("help", "consolehelp"):
         return "help"
-    if line.lower() in ("stop", "quit", "exit"):
+    if line == "\x03" or line.lower() in ("stop", "quit", "exit"):
         return "stop"
     try:
         return shlex.split(line)
