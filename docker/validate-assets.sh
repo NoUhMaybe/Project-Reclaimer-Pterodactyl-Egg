@@ -4,6 +4,10 @@
 # deletes any file — it only reports what is missing, per the project's
 # "do not redistribute Halo 3 assets" requirement.
 #
+# Exits nonzero on missing required assets (see entrypoint.sh for why this
+# deliberately fails fast instead of mirroring upstream's own infinite
+# 15-second "dedicated check" retry loop for the same condition).
+#
 # Usage: validate-assets.sh <server-dir>
 
 set -uo pipefail

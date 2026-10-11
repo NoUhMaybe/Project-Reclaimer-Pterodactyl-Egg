@@ -5,11 +5,17 @@ egg that runs [Project Reclaimer](https://projectreclaimer.dev/) — a
 community-developed Halo 3 dedicated multiplayer server — under
 [Pterodactyl](https://pterodactyl.io/) Panel 1.x / Wings 1.x.
 
-> **Status: implemented and statically validated, not yet live-tested.**
-> Docker was not available in the environment this egg was built in, so the
-> Dockerfile/image has not been built or run against a real Wings node. See
+> **Status: implemented, statically validated, and checked against the real
+> upstream image's published metadata — not yet live-tested against a real
+> Wings node.** Docker was not available in the development environment this
+> egg was revised in, so the Dockerfile/image has not actually been built or
+> run. However, its design is no longer guesswork: the upstream image's exact
+> `Entrypoint`/`Cmd`/`User`/`WorkingDir`/`Env` and its actual entrypoint
+> script were fetched directly from the published image on `ghcr.io` (via the
+> registry HTTP API, no `docker pull` required) and used to correct two
+> previously-unverified assumptions — see
 > [TROUBLESHOOTING.md](TROUBLESHOOTING.md#what-has-and-has-not-been-tested)
-> for exactly what has and has not been verified before you rely on this in
+> for exactly what is and isn't verified before you rely on this in
 > production.
 
 ## What this is
@@ -43,24 +49,31 @@ reimplement its Wine/supervisor logic — see
 ## Repository layout
 
 ```
-project-reclaimer-pterodactyl/
-├── egg-project-reclaimer.json   # the importable PTDL_v2 egg (generated, see tools/build_egg.py)
-├── Dockerfile                   # thin wrapper FROM the official upstream image
+.
+├── egg-project-reclaimer.json          # the importable PTDL_v2 egg (generated, see tools/build_egg.py)
+├── Dockerfile                          # thin wrapper FROM the official upstream image
 ├── docker/
-│   ├── entrypoint.sh            # baked into the image; adapts paths, generates config, hands off to upstream
-│   ├── configure.py             # dedicated.toml sentinel-block generator/patcher
-│   └── validate-assets.sh       # checks for required Halo 3 files before start
+│   ├── entrypoint.sh                   # baked into the image; adapts paths, generates config, hands off to upstream
+│   ├── configure.py                    # dedicated.toml sentinel-block generator/patcher
+│   └── validate-assets.sh              # checks for required Halo 3 files before start
 ├── scripts/
-│   └── install.sh               # Pterodactyl "Install Script" (runs in a separate installer container)
+│   └── install.sh                      # Pterodactyl "Install Script" (runs in a separate installer container)
 ├── tools/
-│   └── build_egg.py             # regenerates egg-project-reclaimer.json from scripts/install.sh
+│   └── build_egg.py                    # regenerates egg-project-reclaimer.json from scripts/install.sh
 ├── config/
-│   └── dedicated.toml.example   # annotated reference, not used directly at runtime
+│   └── dedicated.toml.example          # annotated reference, not used directly at runtime
 ├── tests/
-│   ├── test_egg.py              # structural/schema validation of the egg JSON
-│   ├── test_config.py           # unit tests for configure.py
-│   └── test-runtime.sh          # manual/live smoke test (requires Docker + real game assets)
-├── .github/workflows/validate.yml
+│   ├── test_egg.py                     # unittest: structural/schema validation of the egg JSON
+│   ├── test_config.py                  # unittest: configure.py unit + end-to-end tests
+│   ├── test_dockerfile.py              # unittest: static + live regression tests for the upstream ENTRYPOINT/CMD contract
+│   ├── test-runtime.sh                 # orchestrator: runs A/B/C, reports D as manual-only
+│   ├── test-runtime-a-missing-assets.sh
+│   ├── test-runtime-b-configuration.sh
+│   ├── test-runtime-c-nonroot-fs.sh
+│   └── test-runtime-d-full-startup.sh  # requires your own Halo 3 assets; never run in CI
+├── .github/workflows/
+│   ├── validate.yml                    # JSON/schema, unit tests, shellcheck, docker build + A/B/C on every push/PR
+│   └── publish.yml                     # builds + pushes to GHCR — only on a version tag push or manual dispatch
 ├── README.md / INSTALL.md / CONFIGURATION.md / TROUBLESHOOTING.md
 └── LICENSE
 ```
@@ -81,22 +94,46 @@ Three approaches were evaluated, per the project brief:
 | **B. Thin compatibility image** | Build `FROM` the upstream image, add only a small adaptation entrypoint | **Chosen.** Minimizes modification, preserves upstream's Wine/supervisor logic entirely, satisfies "do not rebuild from source". |
 | C. Custom Wine-based image | Install Project Reclaimer into a generic Pterodactyl Wine yolk | **Rejected.** Project Reclaimer's source is closed; there is no public installer/package to install into a generic Wine image, only the prebuilt Docker image. |
 
-### How the wrapper avoids guessing upstream's internals
+### How upstream's internals were verified, not guessed
 
-Project Reclaimer's Docker image source is **not public** ("the source stays
-private for now" — projectreclaimer.dev), so this egg cannot know upstream's
-exact internal binary paths or entrypoint script. The Dockerfile sets a new
-`ENTRYPOINT` but never sets `CMD`, so Docker automatically inherits the
-upstream image's original `CMD` and passes it to our entrypoint as `"$@"`.
-Our entrypoint does its adaptation work and finishes with `exec "$@"`,
-running whatever upstream's own startup command actually is — without this
-repository ever needing to hardcode it. See
-[docker/entrypoint.sh](docker/entrypoint.sh) for the full reasoning.
+Project Reclaimer's Docker image *source repository* is not public, but the
+image it *publishes* is, and its exact metadata and entrypoint script were
+fetched directly from `ghcr.io` using the plain registry HTTP API (anonymous
+token + manifest + config blob + one small layer — no `docker pull` or local
+Docker daemon required; see `tests/test_dockerfile.py` for a regression test
+that repeats this check automatically). This confirmed:
 
-One consequence: the egg's **Startup Command** field is not functionally
-used (upstream's own command does not read Pterodactyl's `STARTUP`
-variable). It is set to a self-documenting placeholder. See
-[TROUBLESHOOTING.md](TROUBLESHOOTING.md).
+- Upstream's own `Entrypoint` is `["/usr/bin/tini", "--", "reclaimer-entrypoint"]`
+  with `Cmd: ["start"]` — `reclaimer-entrypoint` is a real, named program
+  installed at `/usr/local/bin/reclaimer-entrypoint`, **not** part of `Cmd`.
+  An earlier revision of this Dockerfile replaced `ENTRYPOINT` and relied on
+  Docker inheriting `CMD` alone (`["start"]`) as the program to run — that
+  would have executed the literal, non-existent command `start`. This is
+  fixed: the Dockerfile's `ENTRYPOINT` now names `reclaimer-entrypoint`
+  explicitly, and `tests/test_dockerfile.py` guards against regressing this.
+- Wings always runs server containers as an explicit, non-root `uid:gid`
+  (confirmed from the `pterodactyl/wings` source, `environment/docker/container.go`),
+  regardless of the image's own `USER` directive — and that UID is **not**
+  guaranteed to be `988`; it is whatever UID Wings' own `useradd --system`
+  happened to allocate on that specific node. Upstream's entrypoint only
+  drops privileges to its baked-in `PUID`/`PGID` when it is already running
+  as root, which never happens under Wings — so `/home/reclaimer/.wine` (the
+  Wine prefix baked into the image for UID 1000 at build time) would belong
+  to the wrong user on essentially every real Wings node. The Dockerfile
+  replaces it with a symlink onto `/home/container`, and the entrypoint
+  re-initializes a fresh prefix for whichever UID Wings actually assigns on
+  each server's first boot (a one-time cost — see CONFIGURATION.md).
+
+See [docker/entrypoint.sh](docker/entrypoint.sh) and
+[TROUBLESHOOTING.md](TROUBLESHOOTING.md#verified-upstream-image-metadata) for
+the full details, including the exact commands used to verify all of this.
+
+One consequence of preserving upstream's real program unchanged: the egg's
+**Startup Command** field is still largely informational rather than a
+free-form shell command (it is honored via Pterodactyl's standard `$STARTUP`
+mechanism, but there is only one correct value — `reclaimer-entrypoint
+start` — since that is upstream's actual, verified entrypoint program, not a
+placeholder).
 
 ## Quick start
 
@@ -112,24 +149,84 @@ See [INSTALL.md](INSTALL.md) for the full walkthrough. Summary:
 
 ### Building and publishing the image
 
-```bash
-docker build -t ghcr.io/YOUR_ORG/project-reclaimer-pterodactyl:latest .
-docker push ghcr.io/YOUR_ORG/project-reclaimer-pterodactyl:latest
-```
-
-The `RECLAIMER_VERSION` build arg pins the upstream base image tag
-(default `0.9.13` at the time this was written — **verify this tag still
-exists** at `ghcr.io/projectreclaimer/project-reclaimer-dedicated` before
-building, since it could not be confirmed with a live `docker pull` in the
-environment this egg was authored in):
+The egg references `ghcr.io/nouhmaybe/project-reclaimer-pterodactyl:latest`
+(the preferred destination for this repository), but **nothing has been
+published there yet** — no image has been pushed, and package publishing
+requires an explicit, authorized action (see below). Until you publish one
+yourself, build locally first:
 
 ```bash
-docker build --build-arg RECLAIMER_VERSION=0.9.13 -t ghcr.io/YOUR_ORG/project-reclaimer-pterodactyl:0.9.13 .
+docker build -t project-reclaimer-pterodactyl:local .
 ```
 
-CI (`.github/workflows/validate.yml`) builds the image to catch Dockerfile
-errors but never pushes it automatically, per the project's security
-requirements around unattended publishing.
+The `RECLAIMER_VERSION` build arg pins the upstream base image tag (default
+`0.9.13`, confirmed to exist via a live registry query against
+`ghcr.io/projectreclaimer/project-reclaimer-dedicated` — see
+[tests/test_dockerfile.py](tests/test_dockerfile.py), which re-checks this
+automatically in CI):
+
+```bash
+docker build --build-arg RECLAIMER_VERSION=0.9.13 -t project-reclaimer-pterodactyl:0.9.13 .
+```
+
+Point your own server's egg Docker Image field at whatever you build/push —
+Pterodactyl does not require the image to be on GHCR specifically; any
+registry reachable from your Wings node(s) works, including a private one.
+
+#### Publishing to GHCR
+
+[`.github/workflows/publish.yml`](.github/workflows/publish.yml) builds and
+pushes `ghcr.io/nouhmaybe/project-reclaimer-pterodactyl` using the
+repository's own `GITHUB_TOKEN` (no separate PAT/secret needed, scoped to
+`packages: write`). It is **not** triggered by ordinary commits — only by:
+
+- pushing a version tag matching `v*.*.*` (e.g. `git tag v0.1.0 && git push
+  origin v0.1.0`) — pushes that tag as the image tag, and also `:latest` if
+  the tag has no prerelease suffix (`v0.1.0-beta.1` does not get `:latest`);
+  or
+- running it manually from the Actions tab (`workflow_dispatch`), optionally
+  overriding the upstream `RECLAIMER_VERSION` to pin and choosing whether to
+  also push `:latest`.
+
+The workflow runs the full unit test suite first and only builds/pushes if
+that passes. It builds for `linux/amd64` only (matching the two Wings nodes
+described in this project's deployment target) and attaches standard
+`org.opencontainers.image.*` labels. No image has been pushed as part of
+writing this egg — that remains a deliberate, manually-authorized step for
+the repository owner.
+
+CI (`.github/workflows/validate.yml`) separately builds the image on every
+push/PR to catch Dockerfile errors and runs the automatable runtime tests
+against it (see "Testing" below), but never pushes it anywhere.
+
+## Testing
+
+```bash
+# Unit tests (JSON/schema validation, configure.py logic, upstream
+# Entrypoint/Cmd regression checks against the live registry — ~1s, no
+# Docker required):
+python3 -m unittest discover -s tests -v
+
+# Shell syntax checks (no Docker required):
+bash -n docker/entrypoint.sh docker/validate-assets.sh scripts/install.sh
+
+# ShellCheck (requires shellcheck installed locally, or rely on CI):
+shellcheck docker/*.sh scripts/*.sh tests/*.sh
+
+# Build the image (requires Docker):
+docker build -t project-reclaimer-pterodactyl:local .
+
+# Runtime integration tests A/B/C (requires Docker; no game assets needed):
+IMAGE=project-reclaimer-pterodactyl:local tests/test-runtime.sh
+
+# Test D — full startup (requires Docker AND your own legally obtained
+# Halo 3 files; see the script for exactly what it does and does not verify):
+GAME_DIR=/path/to/your/game IMAGE=project-reclaimer-pterodactyl:local \
+    tests/test-runtime-d-full-startup.sh
+```
+
+See [TROUBLESHOOTING.md](TROUBLESHOOTING.md#what-has-and-has-not-been-tested)
+for exactly which of these have actually been run and with what results.
 
 ## Resource recommendations
 
@@ -150,7 +247,10 @@ for the full multiplayer map set, +~4 GB more for the full campaign).
 ## Upstream references used
 
 - Pterodactyl: [Creating a Custom Egg](https://docs.pterodactyl.io/v1/guides/egg-creation/creating-custom-egg), [Egg Docker Images](https://docs.pterodactyl.io/v1/guides/egg-creation/egg-docker-images), [Egg Config Parser](https://docs.pterodactyl.io/v1/guides/egg-creation/egg-config-parser), [Egg Variables](https://docs.pterodactyl.io/v1/guides/egg-creation/egg-variables), [Egg Install Script](https://docs.pterodactyl.io/v1/guides/egg-creation/egg-install-script), [Creating a Custom Image](https://docs.pterodactyl.io/v1/guides/egg-creation/creating-custom-image)
+- Pterodactyl Wings source (`pterodactyl/wings`, `develop` branch): `config/config.go` (`EnsurePterodactylUser`, `System.User`) and `environment/docker/container.go` (`Create()`'s `conf.User` assignment) — used to verify how Wings assigns the container's runtime UID/GID, not assumed.
 - Project Reclaimer: [Host a dedicated server](https://projectreclaimer.dev/host), [projectreclaimer.dev](https://projectreclaimer.dev/), published `compose.yaml` / `compose.single.yaml` / `env.example`
+- The published `ghcr.io/projectreclaimer/project-reclaimer-dedicated:0.9.13` image itself: manifest, image config, and the `reclaimer-entrypoint` script extracted from its own layer, fetched directly via the registry HTTP API (see `tests/test_dockerfile.py`).
+- [ProjectReclaimer/project-reclaimer-releases](https://github.com/ProjectReclaimer/project-reclaimer-releases) — official release repository referenced for version numbering context.
 - Reference eggs: [pterodactyl/game-eggs](https://github.com/pterodactyl/game-eggs) (Icarus dedicated egg), [pterodactyl/yolks](https://github.com/pterodactyl/yolks)
 
 See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for the full list of unresolved

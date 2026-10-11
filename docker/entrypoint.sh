@@ -2,19 +2,30 @@
 # Pterodactyl compatibility wrapper for the official Project Reclaimer image.
 #
 # Responsibilities (in order):
-#   1. Adapt upstream's hardcoded /server and /cache paths onto Pterodactyl's
-#      single persistent volume at /home/container, via symlinks, so data
-#      survives container restarts without needing extra Docker volumes
-#      (which Pterodactyl eggs cannot declare).
-#   2. Translate egg variables into the upstream RECLAIMER_DEDICATED_* /
-#      PUID / PGID environment variables.
+#   1. Create the real directories the build-time symlinks in the Dockerfile
+#      point at (/server, /cache, the Wine prefix), under /home/container —
+#      the only path Wings guarantees is writable by whatever UID it runs
+#      this container as. See Dockerfile for why this cannot be done here
+#      via rm -rf + ln -s at runtime (parent-directory permissions).
+#   2. Translate egg variables into upstream's documented
+#      RECLAIMER_DEDICATED_* environment variable overrides.
 #   3. Generate or patch dedicated.toml via configure.py.
-#   4. Validate that required Halo 3 game assets have been uploaded.
-#   5. Hand off to the image's own original startup command, inherited
-#      automatically as "$@" because this Dockerfile never overrides CMD.
+#   4. Validate that required Halo 3 game assets have been uploaded, and
+#      fail fast with an actionable message if not (see note below on why
+#      this intentionally does not match upstream's own infinite-retry
+#      behavior).
+#   5. Initialize the Wine prefix for whatever UID we are actually running
+#      as (reclaimer-entrypoint prepare-prefix), since the one upstream
+#      baked into the image at build time belongs to a fixed UID that will
+#      not generally match the UID Wings assigns (see Dockerfile).
+#   6. Hand off to the real upstream program, honoring Pterodactyl's
+#      Wings-injected $STARTUP variable the same way the official
+#      "Creating a Custom Docker Image" guide's example entrypoint does.
 #
-# This script intentionally never invents or hardcodes the upstream image's
-# internal binary paths (see Dockerfile and TROUBLESHOOTING.md).
+# Verified against ghcr.io/projectreclaimer/project-reclaimer-dedicated's
+# actual published image config and entrypoint script (see
+# TROUBLESHOOTING.md "Verified upstream image metadata"); this is not a
+# guess about upstream's internal paths.
 
 set -euo pipefail
 
@@ -30,38 +41,41 @@ echo " Project Reclaimer — Pterodactyl compatibility entrypoint"
 echo "-----------------------------------------------------------"
 
 # ---------------------------------------------------------------------------
-# 1. Persistent directory layout under /home/container, symlinked onto the
-#    paths the upstream binary expects.
+# 1. Create the targets of the symlinks baked in at image build time
+#    (/server -> here, /cache -> here, /home/reclaimer/.wine -> here).
+#    Only mkdir is needed: the symlinks themselves already exist in the
+#    image and point here, and /home/container is always writable by
+#    whatever UID Wings assigned this container, regardless of what UID
+#    that turns out to be on a given node.
 # ---------------------------------------------------------------------------
 SERVER_DIR="$HOME/server"
 CACHE_DIR="$HOME/.cache/reclaimer"
+WINE_PREFIX_DIR="$HOME/.wine-prefix"
 
 mkdir -p "$SERVER_DIR/game" "$SERVER_DIR/content/Maps" "$SERVER_DIR/content/Game Modes" \
-         "$SERVER_DIR/content/Mods" "$SERVER_DIR/playlists" "$SERVER_DIR/data" "$CACHE_DIR"
+         "$SERVER_DIR/content/Mods" "$SERVER_DIR/playlists" "$SERVER_DIR/data" \
+         "$CACHE_DIR" "$WINE_PREFIX_DIR"
 
-if [ -e /server ] && [ ! -L /server ]; then
-    # A real (non-symlink) /server from the base image layer; it can only
-    # contain upstream's own baked-in (empty) scaffold, never user data,
-    # because /home/container is the only path Wings persists across
-    # restarts. Safe to replace with our symlink.
-    rm -rf /server
-fi
-[ -L /server ] || ln -s "$SERVER_DIR" /server
-
-if [ -e /cache ] && [ ! -L /cache ]; then
-    rm -rf /cache
-fi
-[ -L /cache ] || ln -s "$CACHE_DIR" /cache
+for path in /server /cache /home/reclaimer/.wine; do
+    if [ ! -L "$path" ]; then
+        echo "ERROR: $path is not the symlink this image's Dockerfile is supposed to create." >&2
+        echo "This indicates the image was built incorrectly, or the upstream base image" >&2
+        echo "changed its own directory layout in a way this wrapper does not expect." >&2
+        echo "See TROUBLESHOOTING.md 'Verified upstream image metadata'." >&2
+        exit 1
+    fi
+done
 
 # ---------------------------------------------------------------------------
-# 2. Translate egg variables to upstream environment variables.
+# 2. Translate egg variables to upstream's documented environment overrides.
+#
+# PUID/PGID are deliberately NOT set here: upstream's reclaimer-entrypoint
+# only reads them when it finds itself already running as root, to decide
+# which UID/GID to drop privileges to. Wings never runs containers as root
+# (it always passes an explicit non-root --user), so that code path never
+# triggers under Pterodactyl and PUID/PGID would be silently ignored either
+# way — see TROUBLESHOOTING.md.
 # ---------------------------------------------------------------------------
-# Wings always runs this container as the owner of the mounted volume
-# (never literally "root"), so PUID/PGID are set to match the process's own
-# identity, making any upstream chown/setuid-to-PUID logic a safe no-op.
-export PUID="${PUID:-$(id -u)}"
-export PGID="${PGID:-$(id -g)}"
-
 export RECLAIMER_DEDICATED_HOST_NAME="${HOST_NAME:-}"
 export RECLAIMER_DEDICATED_MAX_PLAYERS="${MAX_PLAYERS:-16}"
 export RECLAIMER_DEDICATED_MIN_PLAYERS="${MIN_PLAYERS:-1}"
@@ -80,9 +94,9 @@ fi
 
 # RCON is off unless explicitly enabled with a password. Wings uses bridge
 # networking (never network_mode: host), so the console must listen on
-# every interface to be reachable through the published allocation; it is
-# still only reachable on the same TCP port as the game, which Pterodactyl
-# firewalls to the allocation owner like any other port.
+# every interface to be reachable through the published allocation. This
+# does not, by itself, make RCON safe to expose publicly — see
+# CONFIGURATION.md "RCON" for the host-firewall caveat.
 if [ "${RCON_ENABLED:-false}" = "true" ] && [ -n "${RCON_PASSWORD:-}" ]; then
     export RECLAIMER_DEDICATED_RCON_PASSWORD="${RCON_PASSWORD}"
     export RECLAIMER_DEDICATED_RCON_ADDRESS=0.0.0.0
@@ -92,8 +106,8 @@ fi
 
 # A per-container local master is redundant (it would only ever list this
 # one server) and would need its own Pterodactyl port allocation to be
-# reachable externally; disable it. The server still reports itself to the
-# public default masters over its own game port regardless of this setting.
+# reachable externally; disable it. Per upstream docs, servers report to
+# the public default masters "either way", independent of this setting.
 export RECLAIMER_DEDICATED_MASTER_ENABLED=false
 
 # UPnP only works with host networking, which Wings does not use.
@@ -101,7 +115,8 @@ export RECLAIMER_DEDICATED_UPNP=false
 
 # Leave RECLAIMER_DEDICATED_PUBLIC_ADDRESS unset: outbound detection via
 # api.ipify.org still reports the host's real public IP through Docker's
-# NAT, which is what players need to connect to.
+# NAT. Not yet verified end-to-end from behind Wings' bridge network on a
+# live node — see TROUBLESHOOTING.md.
 
 # ---------------------------------------------------------------------------
 # 3. Generate / patch dedicated.toml (only touches the Pterodactyl-managed
@@ -110,25 +125,48 @@ export RECLAIMER_DEDICATED_UPNP=false
 if command -v python3 >/dev/null 2>&1; then
     python3 /pterodactyl/configure.py
 else
-    echo "WARNING: python3 not found in image; dedicated.toml was not generated." >&2
-    echo "Create $SERVER_DIR/dedicated.toml manually before starting." >&2
+    echo "ERROR: python3 not found in image; cannot generate dedicated.toml." >&2
+    exit 1
 fi
 
 # ---------------------------------------------------------------------------
-# 4. Validate uploaded Halo 3 assets. Fails fast with an actionable message
-#    rather than letting the server silently start without being joinable.
+# 4. Validate uploaded Halo 3 assets. Fails fast with a nonzero exit code
+#    and an actionable message, rather than the infinite 15-second retry
+#    loop upstream's own "dedicated check" performs for the same condition.
+#    We deliberately diverge from upstream here: a crashed/failed Wings
+#    server with a clear log is a better admin experience than a container
+#    stuck indefinitely in "starting", and this check runs well before any
+#    Wine/game process exists, so there is nothing stateful to clean up.
 # ---------------------------------------------------------------------------
 /pterodactyl/validate-assets.sh "$SERVER_DIR"
 
 # ---------------------------------------------------------------------------
-# 5. Hand off to the upstream image's own original command.
+# 5. Initialize the Wine prefix for whichever UID we are actually running
+#    as. Idempotent (upstream's prepare_prefix skips work once
+#    $WINEPREFIX/system.reg exists), so this is a no-op after the first
+#    start of a given server.
 # ---------------------------------------------------------------------------
-if [ "$#" -eq 0 ]; then
-    echo "ERROR: no command was inherited from the base image's CMD." >&2
-    echo "This indicates the upstream image changed its Dockerfile in a way" >&2
-    echo "this wrapper does not expect. See TROUBLESHOOTING.md." >&2
+if ! reclaimer-entrypoint prepare-prefix; then
+    echo "ERROR: failed to initialize the Wine prefix (reclaimer-entrypoint prepare-prefix)." >&2
+    echo "Check the log above for the underlying Wine error." >&2
     exit 1
 fi
 
-echo "Starting Project Reclaimer dedicated server (inherited command: $*)"
-exec "$@"
+# ---------------------------------------------------------------------------
+# 6. Hand off to the real upstream program, honoring Wings' $STARTUP
+#    variable the same way Pterodactyl's own "Creating a Custom Docker
+#    Image" guide's example entrypoint does. Falls back to this image's
+#    CMD (["start"]) when run outside Wings (e.g. manual `docker run`,
+#    tests/test-runtime-*.sh) where $STARTUP is never set.
+# ---------------------------------------------------------------------------
+STARTUP="${STARTUP:-$*}"
+PARSED=$(echo "${STARTUP}" | sed -e 's/{{/${/g' -e 's/}}/}/g' | eval echo "$(cat -)")
+
+if [ -z "$PARSED" ]; then
+    echo "ERROR: no startup command available (neither \$STARTUP nor a CMD argument was set)." >&2
+    exit 1
+fi
+
+echo "Starting Project Reclaimer dedicated server: $PARSED"
+# shellcheck disable=SC2086
+exec $PARSED

@@ -148,18 +148,21 @@ def build() -> dict:
         "meta": {"version": "PTDL_v2", "update_url": None},
         "exported_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S%z"),
         "name": "Project Reclaimer",
-        "author": "unset@example.com",
+        "author": "nouhmaybe@users.noreply.github.com",
         "description": (
-            "Community-developed Halo 3 dedicated multiplayer server (Project Reclaimer). "
-            "Requires your own legally-owned Halo 3 (MCC) game files; none are included. "
-            "See https://projectreclaimer.dev/host for upstream documentation."
+            "Community-developed Halo 3 dedicated multiplayer server (Project Reclaimer), "
+            "run via a thin Pterodactyl-compatibility wrapper around the official "
+            "ghcr.io/projectreclaimer/project-reclaimer-dedicated image. Requires your own "
+            "legally-owned Halo 3 (MCC) game files; none are included. See "
+            "https://projectreclaimer.dev/host for upstream documentation and "
+            "https://github.com/NoUhMaybe/Peoject-Reclaimer-Pterodactyl-Egg for this egg."
         ),
         "features": [],
         "docker_images": {
-            "Project Reclaimer (Pterodactyl compat image)": "ghcr.io/REPLACE_WITH_YOUR_ORG/project-reclaimer-pterodactyl:latest"
+            "Project Reclaimer (Pterodactyl compat image)": "ghcr.io/nouhmaybe/project-reclaimer-pterodactyl:latest"
         },
         "file_denylist": [],
-        "startup": "echo 'Startup is managed by the Docker image entrypoint, not this field — see TROUBLESHOOTING.md'",
+        "startup": "reclaimer-entrypoint start",
         "config": {
             "files": "{}",
             "startup": "{}",

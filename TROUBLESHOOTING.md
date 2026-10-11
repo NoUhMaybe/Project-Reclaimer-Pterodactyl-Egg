@@ -1,126 +1,214 @@
 # Troubleshooting
 
+## Verified upstream image metadata
+
+Fetched directly from the published image on 2026-10-11 using the plain
+registry HTTP API (anonymous token + manifest + config blob; no `docker
+pull` or local Docker daemon needed — see `tests/test_dockerfile.py` for a
+repeatable version of this check, run automatically against the live
+registry in CI):
+
+```
+image:       ghcr.io/projectreclaimer/project-reclaimer-dedicated:0.9.13
+User:        root
+WorkingDir:  /server
+Entrypoint:  ["/usr/bin/tini", "--", "reclaimer-entrypoint"]
+Cmd:         ["start"]
+Env:         HOME=/home/reclaimer USER=reclaimer WINEPREFIX=/home/reclaimer/.wine
+             WINEARCH=win64 WINEDEBUG=-all WINEDLLOVERRIDES=mscoree,mshtml=
+ExposedPorts: 49175/tcp, 49176/udp, 49177/udp
+StopSignal:  SIGINT
+Healthcheck: CMD dedicated status (interval 30s, timeout 30s, start-period 180s, retries 3)
+```
+
+Build history confirms: `useradd --create-home --uid 1000 --user-group
+--shell /usr/sbin/nologin reclaimer`, then `mkdir -p /server /cache
+/opt/reclaimer && chown reclaimer:reclaimer /server /cache`; the entrypoint
+script is installed at `/usr/local/bin/reclaimer-entrypoint` with `dedicated`
+and `project-reclaimer` as symlinks to it; the Wine prefix is initialized
+once at build time (`reclaimer-entrypoint prepare-prefix`, run as the
+`reclaimer` user, UID 1000) before the final image reverts to `USER root`.
+
+The actual `reclaimer-entrypoint` script was also extracted from its own
+image layer and read directly (not reproduced verbatim here for
+cleanliness; its logic is summarized in README.md "How upstream's internals
+were verified" and drove every design decision in `Dockerfile` and
+`docker/entrypoint.sh`). Key confirmed behaviors that are NOT obvious from
+the docs alone:
+
+- `reclaimer-entrypoint start`, when NOT running as root (always true under
+  Wings — see below), skips upstream's own `PUID`/`PGID`/privilege-drop
+  logic entirely and proceeds directly, as whatever UID it was started
+  with. This confirmed PUID/PGID are inert under Pterodactyl.
+- It refuses to start if the Wine prefix (`$WINEPREFIX`) is not owned by
+  the UID it is currently running as ("the Wine prefix ... belongs to
+  another user"). Since the prefix upstream bakes into the image belongs to
+  UID 1000, and Wings' assigned UID is normally something else entirely
+  (see below), this would fail on a real Wings node if the image were used
+  unmodified — which is why this egg's Dockerfile discards that baked
+  prefix and the entrypoint re-initializes one for whatever UID Wings
+  actually assigns, on each server's own first start.
+- If `dedicated.toml` does not exist, `reclaimer-entrypoint start` creates
+  one itself (`dedicated init .`) before this egg's own `configure.py` ever
+  runs — in practice `configure.py` always runs first (see
+  `docker/entrypoint.sh`), so this upstream behavior is pre-empted and
+  never actually triggers, but it means the image is self-healing even if
+  `configure.py` were ever skipped.
+- On missing/invalid game assets, upstream's own `start()` loops forever
+  (retrying `dedicated check` every 15 seconds with actionable messages),
+  rather than exiting. This egg's `docker/validate-assets.sh` deliberately
+  pre-empts that with its own fail-fast, nonzero-exit check instead (see
+  `docker/entrypoint.sh` for the rationale) — upstream's own loop remains
+  as an inert fallback that should never actually trigger in practice.
+
+Separately, confirmed directly from the `pterodactyl/wings` source
+(`develop` branch, `environment/docker/container.go`, function `Create()`):
+Wings always creates server containers with an explicit `conf.User =
+"<uid>:<gid>"`, taken from a "pterodactyl" system user Wings itself manages
+on the host (`config/config.go`, `EnsurePterodactylUser`). This is **not**
+guaranteed to be UID 988 — that is simply a common real-world result, not a
+fixed value; it is whatever UID `useradd --system` happens to allocate on a
+given machine, and can differ between Wings nodes (including the two nodes
+described for this deployment). Confirm the actual value on your own node(s)
+with `id pterodactyl` on the Wings host if you need to reason about exact
+file ownership outside the container.
+
 ## What has and has not been tested
 
-Be precise about this before relying on the egg in production. This egg was
-built in an environment **without Docker, without a Pterodactyl
-Panel/Wings install, and without network access to pull the private
-upstream image**. The following reflects exactly that.
+Be precise about this before relying on the egg in production.
 
-### Verified (static analysis / unit tests, see `tests/`)
+### Verified
 
 - `egg-project-reclaimer.json` is valid JSON and structurally matches the
-  documented PTDL_v2 fields (`tests/test_egg.py`, also run in CI).
+  documented PTDL_v2 fields, including that the install script embedded in
+  it is byte-for-byte identical to `scripts/install.sh` (`tests/test_egg.py`,
+  run via `python3 -m unittest discover -s tests -v`, also run in CI).
 - `docker/configure.py`'s `dedicated.toml` generation/patching logic is
-  correct, idempotent, preserves hand-edited content outside its managed
-  block, correctly escapes special characters (quotes, backslashes) in
-  server names, truncates overlong names, and rejects invalid ports
-  (`tests/test_config.py`, also run end-to-end manually; see its output in
-  the project's implementation history).
+  correct, idempotent (including full `main()` end-to-end runs, not just
+  the internal patch function), preserves hand-edited content outside its
+  managed block, correctly escapes special characters (quotes, backslashes)
+  in server names, truncates overlong names, and rejects invalid/out-of-range
+  ports (`tests/test_config.py`).
+- The Dockerfile's `ENTRYPOINT` correctly names the real
+  `reclaimer-entrypoint` program (not just an inherited, nameless `CMD`),
+  the build-time symlinks for `/server`, `/cache`, and the Wine prefix are
+  present, and the entrypoint calls `reclaimer-entrypoint prepare-prefix`
+  and honors Wings' `$STARTUP` variable (`tests/test_dockerfile.py`, static
+  checks).
+- **The upstream image's actual `Entrypoint`, `Cmd`, `WorkingDir`, and
+  `WINEPREFIX` env var were confirmed live against the real,
+  currently-published `ghcr.io/projectreclaimer/project-reclaimer-dedicated:0.9.13`
+  image** (`tests/test_dockerfile.py`'s `UpstreamImageLiveTests`, which ran
+  successfully against the live registry during development of this egg,
+  and re-runs automatically in CI on every push to catch a future upstream
+  change before it silently breaks container startup).
 - The install script fails fast (`set -euo pipefail`) and does not
   overwrite `bans.json` on reinstall.
 
 ### NOT verified (requires a real Docker host / Wings node / game files)
 
-1. **The Dockerfile has never been built.** No Docker engine was available.
-   Before using this in production, run:
+1. **The Dockerfile has never actually been built.** No Docker engine was
+   available in the environment this egg was authored in — only the
+   registry's HTTP API (for metadata) was reachable, not a local Docker
+   daemon. Before using this in production, run:
    ```bash
    docker build -t project-reclaimer-pterodactyl:test .
    ```
-   and fix anything that surfaces. CI (`.github/workflows/validate.yml`)
-   will attempt this build on every push, but a failure there due to the
-   base image being private/rate-limited from GitHub's runners is a known
-   possibility, not necessarily a Dockerfile bug — check the error message.
+   and work through `tests/test-runtime.sh` (Tests A/B/C) against the
+   result. CI (`.github/workflows/validate.yml`) does this on every push,
+   but a failure there due to the base image being rate-limited from
+   GitHub's runners is a known possibility, not necessarily a Dockerfile
+   bug — check the error message.
 
-2. **The "inherit upstream's CMD" mechanism is unverified against the real
-   image.** This egg's entrypoint relies on Docker's standard layering
-   behavior (a child Dockerfile that sets `ENTRYPOINT` without setting
-   `CMD` inherits the parent's `CMD` as `"$@"`). This is a documented,
-   reliable Docker mechanic, but it has not been exercised against the
-   actual `ghcr.io/projectreclaimer/project-reclaimer-dedicated` image
-   because that image's contents could not be pulled/inspected here. It is
-   possible the upstream image's own `ENTRYPOINT` performs required setup
-   (e.g. starting Xvfb, initializing a Wine prefix, chowning files) that
-   this wrapper's replacement of `ENTRYPOINT` discards. **Run
-   `tests/test-runtime.sh` against the built image on a real Docker host
-   before production use**, and if the container exits immediately or
-   fails to start Wine/the game process, inspect the upstream image's
-   layers (`docker history`, `docker inspect --format '{{json .Config}}'`)
-   to confirm what its original `ENTRYPOINT`/`CMD` actually did, and adjust
-   `docker/entrypoint.sh` accordingly.
+2. **Non-root execution has been reasoned through in detail against the
+   actual extracted upstream script (see above) but never exercised in a
+   running container.** The logic strongly suggests the redesigned
+   Dockerfile/entrypoint (build-time symlinks + runtime `prepare-prefix`)
+   resolves the Wine-prefix-ownership failure that the original,
+   unmodified image would hit under Wings — but this is reasoning from
+   source, not an observed, passing test run. Run
+   `tests/test-runtime-c-nonroot-fs.sh` (automated, no game assets needed)
+   and, ideally, `tests/test-runtime-d-full-startup.sh` (manual, real
+   assets) on a real Docker host before production use.
 
-3. **Non-root execution under Wings is unverified.** Wings always runs
-   containers as the UID/GID that owns the mounted server volume, never as
-   root, regardless of the image's own `USER`/default user. If upstream's
-   real entrypoint assumes it starts as root (common for images that
-   support `PUID`/`PGID` remapping via a root-to-user privilege drop), it
-   may fail under Wings' enforced non-root execution. This wrapper sets
-   `PUID`/`PGID` to the container's actual running UID/GID as a mitigation
-   (making any internal chown/privilege-drop a no-op), but this has not
-   been exercised against the real image.
+3. **No verified "server is ready" console string exists.** Neither the
+   available Project Reclaimer documentation nor the extracted
+   `reclaimer-entrypoint` script (which simply `exec`s into the Wine
+   process once `dedicated check` passes, without printing its own
+   "ready" marker) provides a literal, guaranteed log line equivalent to
+   (for example) Minecraft's `"Done ("`. Rather than invent one,
+   `egg-project-reclaimer.json`'s `config.startup.done` is left as `{}`
+   (empty), so Wings falls back to its own process-based heuristic
+   instead of a true readiness string. **Action required:** once you have
+   a real server running, capture its console output around the point
+   players can actually join (this will be the Windows game executable's
+   own stdout, forwarded through Wine), look for a stable, repeatable
+   line, and add it to the egg's Startup Configuration in the Panel
+   (Process Management → Startup Configuration).
 
-4. **No verified "server is ready" console string exists.** The available
-   Project Reclaimer documentation does not include a literal, guaranteed
-   log line equivalent to (for example) Minecraft's `"Done ("`. Rather than
-   invent one, `egg-project-reclaimer.json`'s `config.startup.done` is left
-   as `{}` (empty), so Wings falls back to its own process-based "is it
-   still running" heuristic instead of a true readiness string. **Action
-   required:** once you have a real server running, capture its console
-   output around the point players can actually join, look for a stable,
-   repeatable line, and add it to the egg's Startup Configuration in the
-   Panel (Process Management → Startup Configuration).
+4. **The default pinned upstream version (`RECLAIMER_VERSION=0.9.13` in the
+   Dockerfile) has been confirmed to exist** via a live registry query (see
+   "Verified upstream image metadata" above) — but whether it remains the
+   newest/recommended release by the time you read this has not been
+   re-checked. Run `tests/test_dockerfile.py` (or `docker pull
+   ghcr.io/projectreclaimer/project-reclaimer-dedicated:0.9.13`) before
+   building, and update the Dockerfile's default `ARG` if a newer stable
+   release exists.
 
-5. **The default pinned upstream version (`RECLAIMER_VERSION=0.9.13` in the
-   Dockerfile) was not confirmed to exist via a live registry query.** It
-   was taken from the most recent version number mentioned in the upstream
-   documentation at the time this was written. Run
-   `docker pull ghcr.io/projectreclaimer/project-reclaimer-dedicated:0.9.13`
-   (or check the project's Discord/release notes) before building, and
-   update the Dockerfile's default `ARG` if it has since moved on.
-
-6. **End-to-end gameplay has not been tested**: no client connected, no
+5. **End-to-end gameplay has not been tested**: no client connected, no
    match was played, server-browser visibility from another network was
    not confirmed, RCON was not exercised, and graceful shutdown timing
-   under real game load was not measured. All of section 13
-   ("Testing Requirements") under "Runtime validation" in the original
-   brief remains to be done by someone with a Docker host, a Wings node,
-   and legally obtained Halo 3 files.
+   under real game load was not measured. This remains Test D
+   (`tests/test-runtime-d-full-startup.sh`), to be done by someone with a
+   Docker host, a Wings node, and legally obtained Halo 3 files — see that
+   script for the exact manual checklist.
 
-## The Startup Command field does nothing
+## The Startup Command field
 
-By design (see README "Architecture decision"): this egg's compatibility
-image preserves the upstream image's own `CMD` and executes it directly.
-Upstream's command does not read Pterodactyl's `STARTUP` environment
-variable (it wasn't built for Pterodactyl), so changing the egg's Startup
-Command field in the Panel has no effect on what actually runs. It is set
-to a self-documenting placeholder rather than something that looks
-functional but isn't.
+By design (see README "How upstream's internals were verified"): this
+egg's compatibility image preserves and directly invokes upstream's real
+`reclaimer-entrypoint start` program, now honoring Pterodactyl's standard
+`$STARTUP` mechanism the way the official custom-image guide's example
+entrypoint does. There is, however, only one verified-correct value for it
+(`reclaimer-entrypoint start`, the egg's default) — changing it to anything
+else requires knowing upstream's other subcommands (`prepare-prefix`,
+or running `dedicated`/`project-reclaimer` directly), which are internal
+implementation details, not a general-purpose shell command field. Most
+admins should never need to change this field at all.
 
 ## Common failure scenarios
 
 | Symptom | Likely cause | What to check / do |
 | --- | --- | --- |
-| Container exits immediately after start | Upstream's real entrypoint logic was not preserved correctly (see unverified item 2 above) | `docker logs` the container; compare against `docker history ghcr.io/projectreclaimer/project-reclaimer-dedicated:<tag>` to see what the original image actually ran |
+| Container exits immediately with "ERROR: ... is not the symlink this image's Dockerfile is supposed to create" | The image was built from an older/modified Dockerfile, or upstream changed its own `/server`/`/cache` paths | Rebuild from the current Dockerfile; if upstream genuinely changed its layout, `tests/test_dockerfile.py`'s live tests will also start failing in CI and point at what changed |
+| Container exits immediately with "the Wine prefix ... belongs to another user" | `reclaimer-entrypoint prepare-prefix` did not run, or `/home/container` is not actually writable by the UID Wings assigned (unexpected; check Wings itself) | Confirm `docker/entrypoint.sh` step 5 ran and succeeded in the log before this; if it's missing entirely, the image may not have rebuilt correctly |
 | Console shows "Required game assets are missing" and the server does not start | `game/halo3/halo3.dll` or `game/halo3/maps/shared.map` not uploaded | Upload them per INSTALL.md step 4; this is a deliberate hard failure, not a bug |
 | Console shows Wine errors (missing DLL, crash) | Runtime dependency missing inside the *runtime* Docker image, or corrupted/incomplete asset upload | Confirm the upload matches upstream's expected layout exactly (case-sensitive paths under `game/halo3/...`); re-run `dedicated init --from` and re-upload if unsure |
-| Incorrect Docker permissions / "permission denied" writing files | Wings chowns `/home/container` to the enforced container UID before start; our symlinks point *inside* that tree, so this should not happen — if it does, it indicates the upstream entrypoint is trying to write somewhere else (e.g. directly to `/cache` before our symlink exists, or to a path we didn't adapt) | Check container logs for the exact failing path; may require extending `docker/entrypoint.sh` with an additional symlink |
+| Incorrect Docker permissions / "permission denied" writing files | Should not happen: `/server`, `/cache`, and the Wine prefix are symlinked onto `/home/container` at build time, which Wings always makes writable by whatever UID it assigns at runtime (see "Verified upstream image metadata"). If it does happen, it indicates either a Wings misconfiguration (confirm with `id pterodactyl` on the Wings host and check `/var/lib/pterodactyl/volumes/<server-uuid>` ownership matches) or a path this wrapper did not account for | Check container logs for the exact failing path; may require extending `docker/entrypoint.sh`/`Dockerfile` with an additional symlink |
 | Game port binds but shows "Address already in use" | Another server/process on the same Wings node is using that port | Pterodactyl allocations are unique per node; this should not happen unless an allocation was manually duplicated outside the Panel |
 | Server browser never lists the server | `SERVER_PUBLIC` is `false` (hidden), the UDP port is not actually reachable from the internet (check the node's upstream firewall/security group, not just Wings), or `public_address` detection failed outbound | Confirm `SERVER_PUBLIC=true`; from another network run the client's server-status check against `<public IP>:<port>`; check container logs for "Hole punching ready" or an ipify detection failure |
 | LAN connectivity works but WAN fails | Port not open at the Wings node's own host firewall / cloud security group (Wings publishing the Docker port is necessary but not sufficient — the host's own firewall still applies) | Open the UDP+TCP port at the OS firewall level on the Wings node itself, not just in Docker |
-| Process exits immediately on every start, repeated restarts | Likely item 2 or 3 above; also check `dedicated.toml` for a syntax error if you hand-edited content outside the managed block | Check the full container log from the very first lines; validate your manual TOML edits upstream with `dedicated check` if you have access to a Windows/Linux copy of the binary outside Docker |
+| Process exits immediately on every start, repeated restarts | Likely one of the Wine-prefix/symlink failures above; also check `dedicated.toml` for a syntax error if you hand-edited content outside the managed block | Check the full container log from the very first lines; validate your manual TOML edits upstream with `dedicated check` if you have access to a Windows/Linux copy of the binary outside Docker |
 | RCON connection refused | `RCON_ENABLED=false` or `RCON_PASSWORD` blank (disables it by design); or connecting to `127.0.0.1` from outside the node | Set both variables; connect to the node's public IP/allocation port, or use an SSH tunnel as described in CONFIGURATION.md |
 | Changes to `dedicated.toml` lost after restart | You edited inside the `# >>> PTERODACTYL MANAGED SERVER BLOCK >>> ... <<<` markers | That block is intentionally regenerated every start from egg variables; edit anything outside it instead, or use the corresponding egg variable |
 | Broken/corrupted `dedicated.toml` after a manual edit | A stray marker comment, or unbalanced quotes in a hand-edited section | `configure.py` only ever replaces text between exact marker lines; if you deleted one marker but not the other, delete both manually and restart — a fresh managed block will be appended |
+| Server stays "Starting" for 10–60+ seconds on its very first boot only | Expected: the Wine prefix is being initialized fresh for this server (see CONFIGURATION.md "First boot and the Wine prefix") | Wait; subsequent restarts should be much faster. If it never progresses past this, check the log for a Wine/Xvfb error from `reclaimer-entrypoint prepare-prefix` |
+| Repeated startup failures after many restarts | Wings' own crash-detection may apply its usual backoff/restart limits regardless of this egg | Check Wings' own logs (`journalctl -u wings`) in addition to the container console |
 
 ## Where commands run
 
+- **Your own development/publishing machine (not a Wings node):**
+  `docker build`, `git tag vX.Y.Z && git push origin vX.Y.Z` (triggers
+  `.github/workflows/publish.yml`), `python3 -m unittest discover`,
+  `shellcheck`.
 - **Docker host (one of the two Wings VMs, e.g. the Proxmox-hosted Ubuntu
-  VM):** `docker build`, `docker pull`, `docker logs <container>`,
+  VM):** `docker pull`, `docker logs <container>`,
   `docker inspect`, host firewall commands (`ufw`, `iptables`).
 - **Wings VM, outside any container:** Wings' own logs
   (`journalctl -u wings`), the Panel's assigned storage path under
   `/var/lib/pterodactyl/volumes/<server-uuid>` (this is the same directory
-  mounted as `/home/container` inside the container).
+  mounted as `/home/container` inside the container), `id pterodactyl` (to
+  check the actual UID/GID Wings assigns on this specific node).
 - **Inside the running game container:** anything invoked via the Panel's
   console, or `docker exec -it <container> bash` if you need to poke
   around directly (e.g. to inspect `/home/container/server/dedicated.toml`

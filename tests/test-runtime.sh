@@ -1,89 +1,58 @@
 #!/bin/bash
-# Manual/live runtime smoke test.
+# Runtime test orchestrator.
 #
-# This is NOT run automatically in CI: it requires a real Docker host,
-# the built project-reclaimer-pterodactyl image, and your own legally
-# obtained Halo 3 game files placed under ./fixtures/game (see below).
-# It approximates what Wings does (bind-mount a single persistent
-# directory at /home/container, publish one UDP+TCP port) without
-# requiring an actual Pterodactyl Panel/Wings install.
+# Runs Tests A, B and C (all automatable against a disposable Docker host,
+# no game assets required) and then explicitly reports Test D as requiring
+# manual execution — it is never silently skipped or claimed as passed.
+#
+# An earlier revision of this script tried to do all of this in one place
+# and ended up asserting contradictory things (expecting the container to
+# both exit on missing assets AND stay running) — see TROUBLESHOOTING.md
+# and tests/test-runtime-a-missing-assets.sh / -b-configuration.sh /
+# -c-nonroot-fs.sh / -d-full-startup.sh for the corrected, separated tests.
 #
 # Usage:
 #   IMAGE=project-reclaimer-pterodactyl:local ./tests/test-runtime.sh
-#
-# What this script DOES verify (if it passes):
-#   - the image starts, the entrypoint runs without crashing
-#   - dedicated.toml is generated with the expected name/port
-#   - the container keeps running (does not immediately exit)
-#   - the UDP game port is open
-#
-# What this script does NOT verify (manual testing required, see
-# TROUBLESHOOTING.md "What has and has not been tested"):
-#   - a real Halo 3 client can actually join and play a match
-#   - server browser / master visibility from a different network
-#   - RCON end to end
-#   - graceful shutdown timing under real game load
 
 set -euo pipefail
 
 IMAGE="${IMAGE:?set IMAGE=<built image tag> before running this script}"
-WORKDIR="$(mktemp -d)"
-CONTAINER_NAME="reclaimer-runtime-test-$$"
-PORT=49176
+export IMAGE
 
-cleanup() {
-    docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
-    rm -rf "$WORKDIR"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+failures=0
+
+run_test() {
+    local name="$1" script="$2"
+    echo ""
+    echo "=============================================================="
+    echo " $name"
+    echo "=============================================================="
+    if bash "$SCRIPT_DIR/$script"; then
+        echo "$name: PASS"
+    else
+        echo "$name: FAIL" >&2
+        failures=$((failures + 1))
+    fi
 }
-trap cleanup EXIT
 
-mkdir -p "$WORKDIR/home-container"
+run_test "Test A — missing assets" test-runtime-a-missing-assets.sh
+run_test "Test B — configuration generation" test-runtime-b-configuration.sh
+run_test "Test C — non-root filesystem" test-runtime-c-nonroot-fs.sh
 
-echo "==> Starting container from $IMAGE"
-docker run -d --name "$CONTAINER_NAME" \
-    -e SERVER_NAME="Runtime Test Server" \
-    -e SERVER_PORT="$PORT" \
-    -e MAX_PLAYERS=16 \
-    -p "${PORT}:${PORT}/udp" \
-    -p "${PORT}:${PORT}/tcp" \
-    -v "$WORKDIR/home-container:/home/container" \
-    "$IMAGE" >/dev/null
+echo ""
+echo "=============================================================="
+echo " Test D — full startup with real Halo 3 assets"
+echo "=============================================================="
+echo "SKIPPED: requires your own legally obtained Halo 3 game files and is"
+echo "never run automatically. This is NOT reported as passed. To run it"
+echo "manually: GAME_DIR=/path/to/game IMAGE=$IMAGE $SCRIPT_DIR/test-runtime-d-full-startup.sh"
+echo "See TROUBLESHOOTING.md 'What has and has not been tested' for exactly"
+echo "what remains unverified without it."
 
-echo "==> Waiting up to 30s for the container to still be running"
-for _ in $(seq 1 30); do
-    if ! docker inspect -f '{{.State.Running}}' "$CONTAINER_NAME" | grep -q true; then
-        echo "FAIL: container exited early. Logs:" >&2
-        docker logs "$CONTAINER_NAME" >&2 || true
-        exit 1
-    fi
-    if [ -f "$WORKDIR/home-container/server/dedicated.toml" ]; then
-        break
-    fi
-    sleep 1
-done
-
-TOML="$WORKDIR/home-container/server/dedicated.toml"
-if [ ! -f "$TOML" ]; then
-    echo "FAIL: dedicated.toml was never generated" >&2
-    docker logs "$CONTAINER_NAME" >&2 || true
+echo ""
+if [ "$failures" -ne 0 ]; then
+    echo "RESULT: $failures automated test(s) failed."
     exit 1
 fi
-
-if ! grep -q 'name = "Runtime Test Server"' "$TOML"; then
-    echo "FAIL: dedicated.toml does not contain the expected server name" >&2
-    cat "$TOML" >&2
-    exit 1
-fi
-
-if ! grep -q "port = $PORT" "$TOML"; then
-    echo "FAIL: dedicated.toml does not contain the expected port" >&2
-    cat "$TOML" >&2
-    exit 1
-fi
-
-echo "PASS: container started, dedicated.toml generated correctly."
-echo "NOTE: this does not confirm the game server itself is joinable;"
-echo "it only confirms the Pterodactyl adaptation layer worked. Without"
-echo "uploaded Halo 3 assets, validate-assets.sh is expected to have"
-echo "exited non-zero inside the container after this point (check"
-echo "'docker logs $CONTAINER_NAME' above for the exact message)."
+echo "RESULT: all automated tests (A, B, C) passed. Test D remains manual — see above."

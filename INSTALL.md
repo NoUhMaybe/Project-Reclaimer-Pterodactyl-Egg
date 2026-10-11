@@ -2,19 +2,19 @@
 
 ## 1. Build and publish the Docker image
 
-The egg references a placeholder image
-(`ghcr.io/REPLACE_WITH_YOUR_ORG/project-reclaimer-pterodactyl:latest`). You
-must build and publish your own before importing the egg, or edit the egg's
-Docker Image field after import to point at wherever you publish it.
+The egg references `ghcr.io/nouhmaybe/project-reclaimer-pterodactyl:latest`.
+**Nothing has been published there yet** (see TROUBLESHOOTING.md) — build
+your own copy first, either to publish to that same registry (if you have
+access) or to point the egg's Docker Image field at your own registry.
 
 ```bash
 git clone <this repository>
-cd project-reclaimer-pterodactyl
-docker build -t ghcr.io/YOUR_ORG/project-reclaimer-pterodactyl:latest .
-docker push ghcr.io/YOUR_ORG/project-reclaimer-pterodactyl:latest
+cd Peoject-Reclaimer-Pterodactyl-Egg
+docker build -t project-reclaimer-pterodactyl:local .
 ```
 
-Verify the upstream base image tag first:
+Verify the upstream base image tag first (also re-checked automatically by
+`tests/test_dockerfile.py`):
 
 ```bash
 docker pull ghcr.io/projectreclaimer/project-reclaimer-dedicated:0.9.13
@@ -23,14 +23,20 @@ docker pull ghcr.io/projectreclaimer/project-reclaimer-dedicated:0.9.13
 If that tag no longer exists, pass a current one:
 `--build-arg RECLAIMER_VERSION=<version>`.
 
+To publish to GHCR under this repository's own name, push a version tag
+(`git tag v0.1.0 && git push origin v0.1.0`) or run
+[`.github/workflows/publish.yml`](.github/workflows/publish.yml) manually
+from the Actions tab — see README.md "Publishing to GHCR" for exactly what
+that workflow does and when it does (and does not) run.
+
 ## 2. Import the egg into Pterodactyl Panel
 
 1. In the Admin area, go to **Nests** and either pick an existing Nest or
    create a new one (e.g. "Game Servers").
 2. Open the Nest, click **Import Egg**, and upload
    [`egg-project-reclaimer.json`](egg-project-reclaimer.json).
-3. Open the imported egg and edit its **Docker Images** field to the image
-   you published in step 1 (replace the placeholder entirely).
+3. Open the imported egg and edit its **Docker Images** field to whichever
+   image you built/published in step 1.
 4. Review the **Variables** tab — defaults are sensible for a small
    open server, but confirm nothing conflicts with your setup.
 
@@ -40,6 +46,11 @@ If that tag no longer exists, pass a current one:
 2. Assign **one primary network allocation**. That single port is used for
    both the game (UDP) and, if enabled, RCON (TCP) — no additional
    allocations are required (see [CONFIGURATION.md](CONFIGURATION.md#networking)).
+   Wings publishing this port through Docker is **not** the same as it being
+   reachable from the internet: also open the same UDP+TCP port number at
+   the Wings node's own OS firewall (e.g. `sudo ufw allow 49176` on Ubuntu)
+   and in any upstream cloud/provider security group, or players on the
+   public internet will not be able to join even though the server runs fine.
 3. Set resource limits (see README.md "Resource recommendations"); 2 vCPU /
    3 GB RAM / 10 GB storage is a reasonable starting point for a single
    standard server, subject to how many maps you upload.
@@ -104,11 +115,14 @@ features depending on them will not work until you upload them.
   **Map** / **Game Type** (e.g. `Guardian` / `Slayer`).
 - Leaving all three blank uses upstream's own default (Slayer on Guardian).
 
-Click **Start**. Watch the console for asset-validation and startup
-messages. See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) if it does not come
-up cleanly — in particular, note that **automatic "server is ready"
-detection in the Panel UI has not been verified** (see that document);
-rely on the console output itself to confirm the server is actually up.
+Click **Start**. The very first start takes longer than usual (roughly
+10–60 seconds) while a Wine prefix is initialized for this server — see
+CONFIGURATION.md "First boot and the Wine prefix"; this is expected, not a
+hang. Watch the console for asset-validation and startup messages. See
+[TROUBLESHOOTING.md](TROUBLESHOOTING.md) if it does not come up cleanly —
+in particular, note that **automatic "server is ready" detection in the
+Panel UI has not been verified** (see that document); rely on the console
+output itself to confirm the server is actually up.
 
 ## 6. Connect with a Halo 3 client
 

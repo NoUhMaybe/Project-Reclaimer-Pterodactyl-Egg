@@ -60,9 +60,20 @@ directly for `[[server]].port`; there is no separate egg variable for it.
 - **Server Region** — no such upstream concept was found in the Project
   Reclaimer documentation. Inventing one would violate the "do not invent
   upstream configuration keys" requirement, so it was left out.
-- **Log Level / verbose flag** — upstream's `--verbose` CLI flag could not
-  be reliably injected given this egg's "inherit upstream's CMD" startup
-  mechanism (see README "Architecture decision"); see TROUBLESHOOTING.md.
+- **Log Level / verbose flag** — upstream's hosting docs mention a
+  `--verbose` flag for the Windows `dedicated` CLI, but there is no
+  confirmed equivalent for the Linux image's `reclaimer-entrypoint start`
+  subcommand this egg invokes (its actual argument handling was read from
+  the extracted entrypoint script, which takes no extra flags for `start`).
+  Rather than guess at an unverified flag, this was left out; see
+  TROUBLESHOOTING.md.
+- **PUID / PGID** — present in upstream's Docker Compose docs, but inert
+  under Pterodactyl: Wings always starts containers as an explicit,
+  non-root UID/GID it controls itself (see README "How upstream's internals
+  were verified"), and upstream's entrypoint only reads `PUID`/`PGID` when
+  it finds itself already running as root, which never happens under
+  Wings. Exposing them as egg variables would be misleading, so they are
+  not present.
 
 ## Networking
 
@@ -70,18 +81,32 @@ directly for `[[server]].port`; there is no separate egg variable for it.
   both `udp` and `tcp`; the game uses UDP, RCON (if enabled) uses TCP on
   the same port number, exactly matching upstream's own design.
 - The server's `public_address` is left unset, so Project Reclaimer
-  auto-detects it via an outbound request (to `api.ipify.org`) — this still
-  resolves to the Wings node's real public IP even though the container
-  itself is on an isolated bridge network, because outbound NAT preserves
-  the host's public IP as seen by the destination.
+  auto-detects it via an outbound request (to `api.ipify.org`) — this
+  *should* still resolve to the Wings node's real public IP even though the
+  container itself is on an isolated bridge network, because outbound NAT
+  normally preserves the host's public IP as seen by the destination. This
+  reasoning has **not been confirmed on a live Wings node** — see
+  TROUBLESHOOTING.md. If your server is not visible in the browser with its
+  correct address, try setting it explicitly via a custom `dedicated.toml`
+  edit outside the managed block, or via `RECLAIMER_DEDICATED_PUBLIC_ADDRESS`
+  (not currently exposed as an egg variable; add it to the egg if needed).
 - **UPnP is forced off.** Upstream only supports UPnP with host networking,
-  which Wings does not use; port forwarding is Wings' job (it already
-  publishes your allocation on the host).
+  which Wings does not use; Wings' own allocation system is what publishes
+  your port on the Docker host, but **the Wings host's own OS firewall
+  (and any upstream cloud/provider firewall or security group) still
+  applies on top of that** and is not configured by this egg at all — see
+  INSTALL.md and TROUBLESHOOTING.md for the exact commands to open the
+  allocated port there. Do not assume a Pterodactyl allocation alone makes
+  a server reachable from the internet.
 - The container's own built-in "local master" (TCP 49175) is disabled
   (`RECLAIMER_DEDICATED_MASTER_ENABLED=false`). It would only ever list this
   one container's single server and would need its own extra allocation to
-  be reachable externally — your server still reports itself to the public
-  default master servers over its own game port regardless.
+  be reachable externally — per upstream docs, servers report to the
+  public default masters "either way", independent of this setting. Whether
+  that registration actually succeeds end-to-end from behind Wings' bridge
+  network (i.e. a player can find and join the server through the public
+  Server Browser) has **not been verified against a live node** — see
+  TROUBLESHOOTING.md.
 - **Multiple servers = multiple Pterodactyl server instances**, each with
   its own isolated storage (`/home/container`) and its own allocation. This
   egg does not use `RECLAIMER_DEDICATED_ONLY` (upstream's mechanism for
@@ -95,15 +120,39 @@ directly for `[[server]].port`; there is no separate egg variable for it.
   (required for it to be reachable through Wings' bridge networking /
   published allocation) rather than upstream's default `127.0.0.1`
   (which only makes sense with `network_mode: host`).
-- **RCON is unencrypted** (per upstream docs). Treat the allocation's TCP
-  side like any other admin interface: use a strong, unique password, and
-  where possible restrict access at your firewall/security group to known
-  admin IP ranges rather than relying on the password alone.
+- **RCON is unencrypted** (per upstream docs). Listening on `0.0.0.0` means
+  it is reachable by anyone who can reach the allocated TCP port at all —
+  **Pterodactyl's allocation system is not, by itself, a firewall**; it
+  only maps a port through Docker. Whether that port is actually reachable
+  from the public internet depends entirely on the Wings host's own OS
+  firewall and any upstream cloud/provider security group, neither of
+  which this egg configures. Treat RCON like any other admin interface:
+  use a strong, unique password, and restrict the allocated port at the
+  host/network firewall to known admin IP ranges wherever possible, rather
+  than relying on the password alone.
 - To connect without exposing it further, use an SSH tunnel to the Wings
   node: `ssh -L 49176:127.0.0.1:49176 you@wings-node`, then point your RCON
-  tool at `127.0.0.1:49176` — this only works if you also restrict the
-  public-facing TCP port at the host firewall, since the port is still
-  published by Docker for the game's UDP traffic.
+  tool at `127.0.0.1:49176` — this only works as a real restriction if you
+  *also* block the public-facing TCP port at the host firewall, since the
+  same port is still published by Docker for the game's own UDP traffic
+  regardless of whether RCON is enabled.
+- End-to-end RCON connectivity (a real client successfully authenticating
+  and running commands through a live Wings-managed container) has **not
+  been tested** — see TROUBLESHOOTING.md.
+
+## First boot and the Wine prefix
+
+The very first time a given server starts, the entrypoint initializes a
+fresh Wine prefix (`.wine-prefix/` under this server's storage) before the
+game process can run — a one-time delay of roughly 10–60 seconds depending
+on the node's hardware, during which the Panel will show the server as
+still starting. This is deliberate: the Wine prefix baked into the upstream
+Docker image belongs to a fixed build-time user ID that will not generally
+match the user ID Wings assigns on your specific node, so this egg discards
+it and builds one that matches, per server, on first start (see README "How
+upstream's internals were verified"). Subsequent restarts reuse the
+already-initialized prefix and do not pay this cost again, unless the
+server's storage is wiped (e.g. a full reinstall).
 
 ## Playlists, maps, and mods
 

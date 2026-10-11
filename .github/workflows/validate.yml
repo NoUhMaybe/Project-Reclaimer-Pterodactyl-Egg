@@ -35,10 +35,23 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Run egg structural tests
-        run: python3 tests/test_egg.py
-      - name: Run configure.py unit tests
-        run: python3 tests/test_config.py
+      - name: Run full unit test suite
+        run: python3 -m unittest discover -s tests -v
+
+  shell-syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: bash -n syntax check
+        run: |
+          bash -n docker/entrypoint.sh
+          bash -n docker/validate-assets.sh
+          bash -n scripts/install.sh
+          bash -n tests/test-runtime.sh
+          bash -n tests/test-runtime-a-missing-assets.sh
+          bash -n tests/test-runtime-b-configuration.sh
+          bash -n tests/test-runtime-c-nonroot-fs.sh
+          bash -n tests/test-runtime-d-full-startup.sh
 
   shellcheck:
     runs-on: ubuntu-latest
@@ -50,18 +63,31 @@ jobs:
           scandir: "."
           ignore_paths: ".git"
 
-  docker-build:
+  docker-build-and-integration-test:
     runs-on: ubuntu-latest
     # Builds the wrapper image to catch Dockerfile syntax errors and
-    # confirm the upstream base image is pullable. Does not push anywhere;
-    # publishing is a deliberate, separate, manually-triggered step (see
-    # README.md "Publishing the image").
+    # confirm the upstream base image is pullable, then runs the
+    # automatable runtime tests (A/B/C — no game assets required) against
+    # it. Never pushes anywhere; publishing is a deliberate, separate,
+    # tag/manually-triggered workflow (see .github/workflows/publish.yml
+    # and README.md "Publishing the image").
     steps:
       - uses: actions/checkout@v4
       - name: Build image
+        id: build
         run: docker build -t project-reclaimer-pterodactyl:ci .
         continue-on-error: true
+      - name: Run runtime tests A/B/C
+        if: steps.build.outcome == 'success'
+        env:
+          IMAGE: project-reclaimer-pterodactyl:ci
+        run: |
+          chmod +x tests/test-runtime*.sh
+          tests/test-runtime-a-missing-assets.sh
+          tests/test-runtime-b-configuration.sh
+          tests/test-runtime-c-nonroot-fs.sh
       - name: Note on build result
+        if: steps.build.outcome != 'success'
         run: |
           echo "If the build step above failed, check whether it was a Dockerfile"
           echo "problem (should be fixed) or an inability to pull the private/rate"

@@ -1,42 +1,50 @@
 # Project Reclaimer — Pterodactyl compatibility image
 #
 # Architecture: "thin compatibility wrapper" (Approach B, see README.md).
-# We build FROM the official upstream image untouched and only add a small
-# wrapper entrypoint that adapts the upstream filesystem layout
-# (/server, /cache) to Pterodactyl's single persistent volume
-# (/home/container), generates dedicated.toml from egg variables, and then
-# hands control to the image's own original startup command.
+# Builds FROM the official, unmodified upstream image and adapts only what
+# Wings requires. See TROUBLESHOOTING.md "Verified upstream image metadata"
+# for the exact Entrypoint/Cmd/User/WorkingDir/Env this was built against
+# (inspected directly from the published image manifest+config, and from
+# the actual reclaimer-entrypoint script extracted from its layer — not
+# guessed).
 #
-# We deliberately do NOT reimplement or guess the upstream image's internal
-# binary paths or launch logic: by setting ENTRYPOINT without setting CMD,
-# Docker automatically inherits the base image's original CMD, which our
-# entrypoint script receives as "$@" and executes last via `exec "$@"`.
-# This keeps the egg compatible even if upstream changes its internal paths,
-# as long as the image's ENTRYPOINT/CMD contract stays the same.
-#
-# UNVERIFIED ASSUMPTION (see TROUBLESHOOTING.md): the upstream image's
-# source is closed, so its exact internal startup behavior when launched as
-# a non-root UID (as Wings always enforces) has not been confirmed against
-# a live container. Validate this with a real Wings node before production
-# use.
+# Verified facts driving this Dockerfile:
+#   - Upstream's own ENTRYPOINT is ["/usr/bin/tini", "--", "reclaimer-entrypoint"]
+#     with CMD ["start"]. "reclaimer-entrypoint" is a real, named script
+#     installed at /usr/local/bin/reclaimer-entrypoint — not CMD. Replacing
+#     ENTRYPOINT without accounting for this (as an earlier revision of this
+#     Dockerfile did) silently drops the actual program to run; see
+#     tests/test_dockerfile.py for a regression test against this mistake.
+#   - Wings always runs server containers with an explicit, non-root
+#     `--user <uid>:<gid>` (see TROUBLESHOOTING.md), regardless of the
+#     image's own USER directive. The upstream entrypoint only drops
+#     privileges / remaps PUID-PGID when it finds itself running AS root;
+#     under Wings that code path never triggers, so PUID/PGID are inert.
+#   - Deleting/replacing a directory entry needs write access to its PARENT
+#     directory, not the entry itself. "/" and "/home/reclaimer" are
+#     root-owned, so a non-root Wings UID can never symlink /server, /cache,
+#     or the Wine prefix (/home/reclaimer/.wine) onto /home/container at
+#     container *runtime* — only at *build time*, while this Dockerfile is
+#     still running as root. That is what the RUN steps below do; the
+#     entrypoint only ever needs to `mkdir -p` the symlink *targets* under
+#     /home/container at runtime, which Wings always makes writable.
 
 ARG RECLAIMER_VERSION=0.9.13
 FROM ghcr.io/projectreclaimer/project-reclaimer-dedicated:${RECLAIMER_VERSION}
 
-LABEL maintainer="project-reclaimer-pterodactyl" \
-      org.opencontainers.image.source="https://github.com/your-org/project-reclaimer-pterodactyl" \
+LABEL maintainer="NoUhMaybe" \
+      org.opencontainers.image.title="Project Reclaimer (Pterodactyl compatibility image)" \
       org.opencontainers.image.description="Pterodactyl-compatible wrapper around the official Project Reclaimer dedicated server image" \
-      org.opencontainers.image.licenses="MIT"
+      org.opencontainers.image.source="https://github.com/NoUhMaybe/Peoject-Reclaimer-Pterodactyl-Egg" \
+      org.opencontainers.image.licenses="MIT" \
+      io.pterodactyl.egg.upstream.entrypoint="/usr/bin/tini -- reclaimer-entrypoint" \
+      io.pterodactyl.egg.upstream.cmd="start"
 
-# Required by every Pterodactyl egg image.
-ENV USER=container HOME=/home/container
-WORKDIR /home/container
+USER root
 
 # Python 3 (any modern version — configure.py uses only stdlib re/pathlib,
-# no tomllib or third-party dependency) and bash are required by our
-# wrapper scripts. Installed defensively in case the base image does not
-# already provide a Python interpreter.
-USER root
+# no tomllib or third-party dependency) is required by our wrapper scripts.
+# Installed defensively in case the base image does not already provide it.
 RUN set -eux; \
     if command -v python3 >/dev/null 2>&1; then \
         echo "python3 already present: $(python3 --version)"; \
@@ -48,12 +56,40 @@ RUN set -eux; \
         echo "WARNING: no supported package manager found to install python3" >&2; \
     fi
 
+# Replace upstream's fixed-path directories with symlinks onto Pterodactyl's
+# single persistent volume (/home/container). Done here (build time, as
+# root) rather than in the entrypoint, because removing/recreating these
+# entries requires write access to their *parent* directories (/ and
+# /home/reclaimer), which a non-root Wings-assigned UID never has at
+# runtime — only their eventual *targets* under /home/container need to
+# exist at runtime, and Wings always makes /home/container writable by
+# whatever UID it runs the container as.
+#
+# This intentionally discards the Wine prefix upstream pre-built (baked for
+# UID 1000, whoever "reclaimer" happened to be at image build time) because
+# Wings' own container UID is not a fixed, predictable value (see
+# TROUBLESHOOTING.md) — a prefix baked for one UID would not be readable by
+# a differently-assigned UID on another Wings node. The entrypoint
+# regenerates it fresh, as whatever UID Wings actually assigns, on each
+# server's own first start (one-time cost, see CONFIGURATION.md).
+RUN rm -rf /server /cache /home/reclaimer/.wine \
+    && ln -s /home/container/server /server \
+    && ln -s /home/container/.cache/reclaimer /cache \
+    && ln -s /home/container/.wine-prefix /home/reclaimer/.wine
+
+# Required by every Pterodactyl egg image. Safe alongside upstream's own
+# WINEPREFIX (an absolute path Wine always prefers over $HOME-relative
+# lookups) and WORKDIR /server (now a symlink, and the entrypoint/upstream
+# script both `cd` there explicitly regardless of the image's WORKDIR).
+ENV USER=container HOME=/home/container
+WORKDIR /home/container
+
 COPY --chmod=755 docker/entrypoint.sh /pterodactyl/entrypoint.sh
 COPY --chmod=755 docker/validate-assets.sh /pterodactyl/validate-assets.sh
 COPY --chmod=644 docker/configure.py /pterodactyl/configure.py
 
-# Wings always runs the container as the UID/GID that owns the mounted
-# /home/container volume, never as literally "root", regardless of this
-# Dockerfile's own USER directive — this is left on root only so the build
-# steps above (apt/apk) work; Wings overrides the runtime user itself.
-ENTRYPOINT ["/pterodactyl/entrypoint.sh"]
+# tini stays PID 1 for correct signal forwarding/zombie reaping (matching
+# upstream's own choice); our entrypoint does Pterodactyl-specific setup
+# and then hands off to the real reclaimer-entrypoint program by name.
+ENTRYPOINT ["/usr/bin/tini", "--", "/pterodactyl/entrypoint.sh"]
+CMD ["start"]
