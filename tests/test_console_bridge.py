@@ -68,7 +68,7 @@ class ConsoleBridgeProcessTests(unittest.TestCase):
             return proc.returncode, output
 
     def test_child_exit_code_is_preserved(self):
-        code, output = self.run_bridge("import sys\\nsys.exit(23)\\n")
+        code, output = self.run_bridge("import sys\nsys.exit(23)\n")
         self.assertEqual(code, 23, output)
         self.assertIn("Bridge ready", output)
 
@@ -86,7 +86,7 @@ class ConsoleBridgeProcessTests(unittest.TestCase):
             while True:
                 time.sleep(0.02)
             """,
-            commands="help\\nstop\\n",
+            commands="help\nstop\n",
             wait_for="FAKE_SERVER_RUNNING",
         )
         self.assertEqual(code, 0, output)
@@ -95,8 +95,8 @@ class ConsoleBridgeProcessTests(unittest.TestCase):
 
     def test_rcon_disabled_returns_message(self):
         code, output = self.run_bridge(
-            "import time\\ntime.sleep(0.5)\\n",
-            commands="maps\\n",
+            "import time\ntime.sleep(0.5)\n",
+            commands="maps\n",
         )
         self.assertEqual(code, 0, output)
         self.assertIn("Enable RCON and set a password", output)
