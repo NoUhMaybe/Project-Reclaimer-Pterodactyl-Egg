@@ -63,6 +63,7 @@ for path in /server /cache /home/reclaimer/.wine; do
         echo "changed its own directory layout in a way this wrapper does not expect, or" >&2
         echo "this path's parent directory denies traversal to the current UID (a failed" >&2
         echo "lstat() looks identical to 'does not exist' to this check) — compare:" >&2
+        # shellcheck disable=SC2012
         ls -ld "$(dirname "$path")" "$path" 2>&1 | sed 's/^/  /' >&2
         echo "id: $(id)" >&2
         echo "See TROUBLESHOOTING.md 'Verified upstream image metadata'." >&2
