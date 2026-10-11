@@ -40,7 +40,7 @@ class ConsoleBridgeTests(unittest.TestCase):
 class ConsoleBridgeProcessTests(unittest.TestCase):
     """Exercise the bridge as a real subprocess; no Wine or assets needed."""
 
-    def run_bridge(self, source, commands="", timeout=10):
+    def run_bridge(self, source, commands="", timeout=10, wait_for=None):
         with tempfile.TemporaryDirectory() as work:
             fake = pathlib.Path(work) / "fake_server.py"
             fake.write_text(textwrap.dedent(source), encoding="utf-8")
@@ -52,7 +52,15 @@ class ConsoleBridgeProcessTests(unittest.TestCase):
                 stderr=subprocess.STDOUT, text=True, env=env,
             )
             try:
+                prefix = ""
+                if wait_for:
+                    while wait_for not in prefix:
+                        line = proc.stdout.readline()
+                        if not line:
+                            break
+                        prefix += line
                 output, _ = proc.communicate(commands, timeout=timeout)
+                output = prefix + output
             except subprocess.TimeoutExpired:
                 proc.kill()
                 proc.communicate()
@@ -79,6 +87,7 @@ class ConsoleBridgeProcessTests(unittest.TestCase):
                 time.sleep(0.02)
             """,
             commands="help\\nstop\\n",
+            wait_for="FAKE_SERVER_RUNNING",
         )
         self.assertEqual(code, 0, output)
         self.assertIn("Stopping Project Reclaimer", output)
