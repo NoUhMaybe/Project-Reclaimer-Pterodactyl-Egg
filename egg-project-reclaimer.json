@@ -10,7 +10,7 @@
     "description": "Community-developed Halo 3 dedicated multiplayer server (Project Reclaimer), run via a thin Pterodactyl-compatibility wrapper around the official ghcr.io/projectreclaimer/project-reclaimer-dedicated image. Requires your own legally-owned Halo 3 (MCC) game files; none are included. See https://projectreclaimer.dev/host for upstream documentation and https://github.com/NoUhMaybe/Project-Reclaimer-Pterodactyl-Egg for this egg.",
     "features": [],
     "docker_images": {
-        "ghcr.io/nouhmaybe/project-reclaimer-pterodactyl:v0.1.0-dev.4": "ghcr.io/nouhmaybe/project-reclaimer-pterodactyl:v0.1.0-dev.4"
+        "ghcr.io/nouhmaybe/project-reclaimer-pterodactyl:v0.1.0-dev.5": "ghcr.io/nouhmaybe/project-reclaimer-pterodactyl:v0.1.0-dev.5"
     },
     "file_denylist": [],
     "startup": "reclaimer-entrypoint start",
@@ -82,10 +82,10 @@
             "name": "Publicly Listed",
             "description": "When enabled, the server reports to the public master server list (Server Browser). Disable to require Direct Connect.",
             "env_variable": "SERVER_PUBLIC",
-            "default_value": "true",
+            "default_value": "1",
             "user_viewable": true,
             "user_editable": true,
-            "rules": "required|in:true,false",
+            "rules": "required|in:0,1,true,false",
             "field_type": "text"
         },
         {
@@ -122,20 +122,20 @@
             "name": "Automatic Updates",
             "description": "Let the server update Project Reclaimer itself on start and hourly (does not update this Docker image or MCC). Interrupts games in progress when it updates.",
             "env_variable": "AUTO_UPDATE",
-            "default_value": "false",
+            "default_value": "0",
             "user_viewable": true,
             "user_editable": true,
-            "rules": "required|in:true,false",
+            "rules": "required|in:0,1,true,false",
             "field_type": "text"
         },
         {
             "name": "Enable RCON",
             "description": "Enable local-only RCON for interactive commands in the Pterodactyl console. Requires an RCON password; does not expose the RCON service publicly.",
             "env_variable": "RCON_ENABLED",
-            "default_value": "false",
+            "default_value": "0",
             "user_viewable": true,
             "user_editable": true,
-            "rules": "required|in:true,false",
+            "rules": "required|in:0,1,true,false",
             "field_type": "text"
         },
         {
@@ -162,10 +162,10 @@
             "name": "Block VPN / Proxy Connections",
             "description": "Refuse players connecting through a known VPN, proxy or hosting provider.",
             "env_variable": "BLOCK_VPN",
-            "default_value": "true",
+            "default_value": "1",
             "user_viewable": true,
             "user_editable": true,
-            "rules": "required|in:true,false",
+            "rules": "required|in:0,1,true,false",
             "field_type": "text"
         }
     ]
