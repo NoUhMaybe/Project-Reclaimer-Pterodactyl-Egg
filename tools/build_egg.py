@@ -155,7 +155,7 @@ def build() -> dict:
             "ghcr.io/projectreclaimer/project-reclaimer-dedicated image. Requires your own "
             "legally-owned Halo 3 (MCC) game files; none are included. See "
             "https://projectreclaimer.dev/host for upstream documentation and "
-            "https://github.com/NoUhMaybe/Peoject-Reclaimer-Pterodactyl-Egg for this egg."
+            "https://github.com/NoUhMaybe/Project-Reclaimer-Pterodactyl-Egg for this egg."
         ),
         "features": [],
         "docker_images": {

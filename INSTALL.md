@@ -9,7 +9,7 @@ access) or to point the egg's Docker Image field at your own registry.
 
 ```bash
 git clone <this repository>
-cd Peoject-Reclaimer-Pterodactyl-Egg
+cd Project-Reclaimer-Pterodactyl-Egg
 docker build -t project-reclaimer-pterodactyl:local .
 ```
 

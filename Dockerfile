@@ -35,7 +35,7 @@ FROM ghcr.io/projectreclaimer/project-reclaimer-dedicated:${RECLAIMER_VERSION}
 LABEL maintainer="NoUhMaybe" \
       org.opencontainers.image.title="Project Reclaimer (Pterodactyl compatibility image)" \
       org.opencontainers.image.description="Pterodactyl-compatible wrapper around the official Project Reclaimer dedicated server image" \
-      org.opencontainers.image.source="https://github.com/NoUhMaybe/Peoject-Reclaimer-Pterodactyl-Egg" \
+      org.opencontainers.image.source="https://github.com/NoUhMaybe/Project-Reclaimer-Pterodactyl-Egg" \
       org.opencontainers.image.licenses="MIT" \
       io.pterodactyl.egg.upstream.entrypoint="/usr/bin/tini -- reclaimer-entrypoint" \
       io.pterodactyl.egg.upstream.cmd="start"
