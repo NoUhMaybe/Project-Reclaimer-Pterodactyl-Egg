@@ -82,8 +82,8 @@ def build() -> dict:
             "Publicly Listed",
             "When enabled, the server reports to the public master server list (Server Browser). Disable to require Direct Connect.",
             "SERVER_PUBLIC",
-            "true",
-            "required|in:true,false",
+            "1",
+            "required|in:0,1,true,false",
         ),
         variable(
             "Playlist",
@@ -110,15 +110,15 @@ def build() -> dict:
             "Automatic Updates",
             "Let the server update Project Reclaimer itself on start and hourly (does not update this Docker image or MCC). Interrupts games in progress when it updates.",
             "AUTO_UPDATE",
-            "false",
-            "required|in:true,false",
+            "0",
+            "required|in:0,1,true,false",
         ),
         variable(
             "Enable RCON",
             "Enable local-only RCON for interactive commands in the Pterodactyl console. Requires an RCON password; does not expose the RCON service publicly.",
             "RCON_ENABLED",
-            "false",
-            "required|in:true,false",
+            "0",
+            "required|in:0,1,true,false",
         ),
         variable(
             "RCON Password",
@@ -138,8 +138,8 @@ def build() -> dict:
             "Block VPN / Proxy Connections",
             "Refuse players connecting through a known VPN, proxy or hosting provider.",
             "BLOCK_VPN",
-            "true",
-            "required|in:true,false",
+            "1",
+            "required|in:0,1,true,false",
         ),
     ]
 
@@ -159,7 +159,7 @@ def build() -> dict:
         ),
         "features": [],
         "docker_images": {
-        "ghcr.io/nouhmaybe/project-reclaimer-pterodactyl:v0.1.0-dev.4": "ghcr.io/nouhmaybe/project-reclaimer-pterodactyl:v0.1.0-dev.4"
+        "ghcr.io/nouhmaybe/project-reclaimer-pterodactyl:v0.1.0-dev.5": "ghcr.io/nouhmaybe/project-reclaimer-pterodactyl:v0.1.0-dev.5"
         },
         "file_denylist": [],
         "startup": "reclaimer-entrypoint start",
