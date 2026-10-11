@@ -71,11 +71,14 @@ jobs:
             esac
           fi
 
+
       - name: Extract OCI metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.IMAGE_NAME }}
+          flavor: |
+            latest=false
           tags: |
             type=ref,event=tag
             type=raw,value=latest,enable=${{ steps.vars.outputs.push_latest == 'true' }}
@@ -83,6 +86,7 @@ jobs:
             org.opencontainers.image.title=Project Reclaimer (Pterodactyl compatibility image)
             org.opencontainers.image.description=Pterodactyl-compatible wrapper around the official Project Reclaimer dedicated server image
             org.opencontainers.image.licenses=MIT
+  
 
       - name: Build and push
         uses: docker/build-push-action@v6
