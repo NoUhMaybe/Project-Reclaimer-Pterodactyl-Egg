@@ -37,6 +37,7 @@ class ConsoleBridgeTests(unittest.TestCase):
 
 
 
+@unittest.skipUnless(os.name == "posix", "Console supervisor integration requires POSIX process groups")
 class ConsoleBridgeProcessTests(unittest.TestCase):
     """Exercise the bridge as a real subprocess; no Wine or assets needed."""
 
