@@ -125,14 +125,37 @@ def main() -> int:
 
     block = render_server_block(os.environ)
 
+    # Local CLI RCON reads dedicated.toml; keep its credentials in sync with
+    # the startup variables while preserving unrelated manual settings.
+    rcon_enabled = os.environ.get("RCON_ENABLED", "false").lower() == "true"
+    rcon_password = os.environ.get("RCON_PASSWORD", "") if rcon_enabled else ""
+    def sync_rcon(text: str) -> str:
+        import re
+        match = re.search(r"(?m)^\[rcon\]\s*$", text)
+        if not match:
+            return text + "\n[rcon]\npassword = " + toml_string(rcon_password) + "\naddress = \"127.0.0.1\"\n"
+        start = match.end()
+        next_table = re.search(r"(?m)^\[", text[start:])
+        end = start + next_table.start() if next_table else len(text)
+        section = text[start:end]
+        for key, value in (("password", toml_string(rcon_password)), ("address", toml_string("127.0.0.1"))):
+            pattern = rf"(?m)^{key}\s*=.*$"
+            if re.search(pattern, section):
+                section = re.sub(pattern, lambda _: f"{key} = {value}", section)
+            else:
+                section += f"{key} = {value}\n"
+        return text[:start] + section + text[end:]
+
+
     if not toml_path.exists():
-        content = DEFAULT_TEMPLATE.format(sentinel_block=block)
+        content = sync_rcon(DEFAULT_TEMPLATE.format(sentinel_block=block))
         toml_path.write_text(content, encoding="utf-8")
         print(f"configure.py: wrote new {toml_path}")
         return 0
 
     original = toml_path.read_text(encoding="utf-8")
     updated, appended = patch_existing(original, block)
+    updated = sync_rcon(updated)
 
     if updated == original:
         print(f"configure.py: {toml_path} already up to date")
