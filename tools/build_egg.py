@@ -115,14 +115,14 @@ def build() -> dict:
         ),
         variable(
             "Enable RCON",
-            "Turn on the password-protected remote console. Requires RCON Password to also be set.",
+            "Enable local-only RCON for interactive commands in the Pterodactyl console. Requires an RCON password; does not expose the RCON service publicly.",
             "RCON_ENABLED",
             "false",
             "required|in:true,false",
         ),
         variable(
             "RCON Password",
-            "Password for the remote console (8-128 characters). RCON stays disabled while this is blank, even if Enable RCON is on. RCON is unencrypted: prefer an SSH tunnel or VPN to reach it, see TROUBLESHOOTING.md.",
+            "Password for the local-only RCON bridge (8-128 characters). Keep secret. RCON remains disabled if blank. Do not expose RCON publicly.",
             "RCON_PASSWORD",
             "",
             "nullable|string|between:8,128",
@@ -159,7 +159,7 @@ def build() -> dict:
         ),
         "features": [],
         "docker_images": {
-        "ghcr.io/nouhmaybe/project-reclaimer-pterodactyl:v0.1.0-dev.1": "ghcr.io/nouhmaybe/project-reclaimer-pterodactyl:v0.1.0-dev.1"
+        "ghcr.io/nouhmaybe/project-reclaimer-pterodactyl:v0.1.0-dev.4": "ghcr.io/nouhmaybe/project-reclaimer-pterodactyl:v0.1.0-dev.4"
         },
         "file_denylist": [],
         "startup": "reclaimer-entrypoint start",
