@@ -100,6 +100,7 @@ WORKDIR /home/container
 COPY --chmod=755 docker/entrypoint.sh /pterodactyl/entrypoint.sh
 COPY --chmod=755 docker/validate-assets.sh /pterodactyl/validate-assets.sh
 COPY --chmod=644 docker/configure.py /pterodactyl/configure.py
+COPY --chmod=644 docker/console_bridge.py /pterodactyl/console_bridge.py
 
 # tini stays PID 1 for correct signal forwarding/zombie reaping (matching
 # upstream's own choice); our entrypoint does Pterodactyl-specific setup
