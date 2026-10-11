@@ -52,6 +52,10 @@ SERVER_DIR="$HOME/server"
 CACHE_DIR="$HOME/.cache/reclaimer"
 WINE_PREFIX_DIR="$HOME/.wine-prefix"
 
+# Use the actual Wings-owned persistent directory rather than the
+# upstream root-owned Wine-prefix symlink.
+export WINEPREFIX="$WINE_PREFIX_DIR"
+
 mkdir -p "$SERVER_DIR/game" "$SERVER_DIR/content/Maps" "$SERVER_DIR/content/Game Modes" \
          "$SERVER_DIR/content/Mods" "$SERVER_DIR/playlists" "$SERVER_DIR/data" \
          "$CACHE_DIR" "$WINE_PREFIX_DIR"
@@ -151,6 +155,10 @@ fi
 #    $WINEPREFIX/system.reg exists), so this is a no-op after the first
 #    start of a given server.
 # ---------------------------------------------------------------------------
+echo "Wine prefix: $WINEPREFIX"
+echo "Runtime UID/GID: $(id -u):$(id -g)"
+stat -c 'Wine prefix owner: %u:%g permissions: %a' "$WINEPREFIX"
+
 if ! reclaimer-entrypoint prepare-prefix; then
     echo "ERROR: failed to initialize the Wine prefix (reclaimer-entrypoint prepare-prefix)." >&2
     echo "Check the log above for the underlying Wine error." >&2
