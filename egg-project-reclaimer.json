@@ -10,7 +10,7 @@
     "description": "Community-developed Halo 3 dedicated multiplayer server (Project Reclaimer), run via a thin Pterodactyl-compatibility wrapper around the official ghcr.io/projectreclaimer/project-reclaimer-dedicated image. Requires your own legally-owned Halo 3 (MCC) game files; none are included. See https://projectreclaimer.dev/host for upstream documentation and https://github.com/NoUhMaybe/Project-Reclaimer-Pterodactyl-Egg for this egg.",
     "features": [],
     "docker_images": {
-        "ghcr.io/nouhmaybe/project-reclaimer-pterodactyl:v0.1.0-dev.1": "ghcr.io/nouhmaybe/project-reclaimer-pterodactyl:v0.1.0-dev.1"
+        "ghcr.io/nouhmaybe/project-reclaimer-pterodactyl:v0.1.0-dev.4": "ghcr.io/nouhmaybe/project-reclaimer-pterodactyl:v0.1.0-dev.4"
     },
     "file_denylist": [],
     "startup": "reclaimer-entrypoint start",
@@ -130,7 +130,7 @@
         },
         {
             "name": "Enable RCON",
-            "description": "Turn on the password-protected remote console. Requires RCON Password to also be set.",
+            "description": "Enable local-only RCON for interactive commands in the Pterodactyl console. Requires an RCON password; does not expose the RCON service publicly.",
             "env_variable": "RCON_ENABLED",
             "default_value": "false",
             "user_viewable": true,
@@ -140,7 +140,7 @@
         },
         {
             "name": "RCON Password",
-            "description": "Password for the remote console (8-128 characters). RCON stays disabled while this is blank, even if Enable RCON is on. RCON is unencrypted: prefer an SSH tunnel or VPN to reach it, see TROUBLESHOOTING.md.",
+            "description": "Password for the local-only RCON bridge (8-128 characters). Keep secret. RCON remains disabled if blank. Do not expose RCON publicly.",
             "env_variable": "RCON_PASSWORD",
             "default_value": "",
             "user_viewable": true,
