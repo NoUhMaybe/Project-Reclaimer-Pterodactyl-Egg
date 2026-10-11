@@ -1,0 +1,69 @@
+name: Validate egg
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  validate-json:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate egg-project-reclaimer.json is valid JSON
+        run: python3 -c "import json; json.load(open('egg-project-reclaimer.json', encoding='utf-8'))"
+      - name: Regenerate egg JSON and diff against committed copy
+        run: |
+          cp egg-project-reclaimer.json /tmp/committed-egg.json
+          python3 tools/build_egg.py
+          python3 - <<'PY'
+          import json
+          a = json.load(open('/tmp/committed-egg.json', encoding='utf-8'))
+          b = json.load(open('egg-project-reclaimer.json', encoding='utf-8'))
+          a.pop('exported_at', None)
+          b.pop('exported_at', None)
+          assert a == b, (
+              "egg-project-reclaimer.json is out of date; run "
+              "'python3 tools/build_egg.py' and commit the result"
+          )
+          PY
+
+  python-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Run egg structural tests
+        run: python3 tests/test_egg.py
+      - name: Run configure.py unit tests
+        run: python3 tests/test_config.py
+
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run ShellCheck
+        uses: ludeeus/action-shellcheck@master
+        with:
+          scandir: "."
+          ignore_paths: ".git"
+
+  docker-build:
+    runs-on: ubuntu-latest
+    # Builds the wrapper image to catch Dockerfile syntax errors and
+    # confirm the upstream base image is pullable. Does not push anywhere;
+    # publishing is a deliberate, separate, manually-triggered step (see
+    # README.md "Publishing the image").
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t project-reclaimer-pterodactyl:ci .
+        continue-on-error: true
+      - name: Note on build result
+        run: |
+          echo "If the build step above failed, check whether it was a Dockerfile"
+          echo "problem (should be fixed) or an inability to pull the private/rate"
+          echo "limited upstream base image from this runner (a known, documented"
+          echo "limitation - see TROUBLESHOOTING.md)."
