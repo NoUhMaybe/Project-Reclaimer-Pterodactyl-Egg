@@ -14,6 +14,7 @@ the explicit 0.9.14 evidence gap.
 | Environment | Same upstream HOME /home/reclaimer, USER reclaimer, WINEPREFIX /home/reclaimer/.wine, WINEARCH win64, WINEDEBUG -all; no new wrapper variable required |
 | Entrypoint scripts | Extracted from both image layers; byte-identical. Prefix preparation, owner checks, root-only UID remapping and Xvfb/Wine startup contract unchanged |
 | Writable executable | Bundled /opt/reclaimer/project-reclaimer.exe; writable /server/.reclaimer/project-reclaimer.exe (per-instance subfolder with ONLY). Changed bundled hash resets this copy at normal startup; no uploaded assets replaced |
+| Bundled executable identity | SHA256 `15c2b745e2c7dd1563a69f9fa09ba399ac3702eb3da200afa8d42d9a271f03d7`, extracted from verified layer `sha256:c77cd11670cf3674e3a1cfed2183c99f12a3a4354d3829e896ac2da22020d447`. Distinct build from the release asset; actual --version confirms .20 |
 | Persistent layout | Existing /server, /cache and Wine-prefix symlinks retained, all writable data under /home/container. No migration/deletion of assets, mods, bans or playlists |
 | Supervision | Existing bridge/process groups/stdin worker/log inheritance and SIGINT escalation retained; native helper is bounded and closed during cleanup |
 | RCON | Protocol 1, local credentials, structured command/args and JSON replies compatible; actual .13/.20 CLI tested against loopback fixture |

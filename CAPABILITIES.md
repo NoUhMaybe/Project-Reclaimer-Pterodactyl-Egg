@@ -29,6 +29,7 @@ Actual official Windows binaries, checksum verified:
 | --- | --- | --- |
 | .13 | `afe11ddc1bd57b451f668e820d4236c1eea44798fff365eecd680d6dc8122a91` | Version, help, structured RCON arguments against loopback fixture |
 | .20 | `e0d0861b265109cd623e2c991b63c60f08512bca2ae2bc028cb0af996c7bfe3d` | Above plus playlist/content/reload help, new TOML fields parsing, invalid camera rejection, validation failing safely without assets |
+| .20 image bundle | `15c2b745e2c7dd1563a69f9fa09ba399ac3702eb3da200afa8d42d9a271f03d7` | Distinct upstream build extracted from the official image layer; actual --version is .20; same CLI/protocol/parser probes |
 
 CI Test F also runs the actual bundled binary under Wine as a non-root UID,
 checking checksum/version and native CLI availability. Successful native
