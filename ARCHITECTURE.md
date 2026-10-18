@@ -10,6 +10,7 @@ tini (PID 1)
         upstream Wine/Xvfb/dedicated supervisor and game processes
       dedicated rcon <split command args> (one bounded request at a time)
       dedicated rcon --json --watch (lazy optional control-event observer)
+      dedicated playlist/content (bounded native filesystem helper, private staging)
 ```
 
 The upstream program owns its internal Wine/game supervision; this change does
@@ -32,7 +33,7 @@ SIGINT and SIGTERM still request **SIGINT to the child process group**. The
 existing escalation remains 15 seconds, SIGTERM, 5 seconds, SIGKILL. Signals do not
 depend on menu state or RCON availability. Child exit codes propagate; input and
 event workers are daemon threads, so they cannot keep a dead game container
-running. Auxiliary RCON clients are killed during bridge cleanup. EOF unregisters
+running. Auxiliary RCON/native clients are killed during bridge cleanup. EOF unregisters
 stdin; it does not terminate the game. Menus repaint only on operator actions.
 
 ## Independent backends
@@ -44,14 +45,28 @@ stdin; it does not terminate the game. Menus repaint only on operator actions.
 | RCON subprocess transport/credentials | `rcon_client.py` |
 | Runtime semantics/version gates | `commands.py`, `capabilities.py` |
 | Optional control observation | `events.py`, via documented existing CLI |
-| Persistent JSON/content/mod/config operations | `playlists.py`, `content.py`, `configuration.py`, `filesystem.py` |
+| Persistent JSON/content/mod/config operations | `playlists.py`, `content.py`, `configuration.py`, `filesystem.py`, `native.py` |
 | Presentation and read-only health | `formatting.py`, `diagnostics.py` |
 | Process ownership/signal escalation | Existing `console_bridge.py` |
 
 Persistent backends import no RCON client. The controller injects installed
 references into playlist validation; backend tests use fixed inventories. No
 filesystem action is encoded as an RCON command. The optional native playlist
-validator (0.9.15+) is a fixed local CLI invocation, separate from RCON.
+validator (0.9.15+) is a fixed local CLI invocation, separate from RCON. On .20
+it validates unsaved candidates before every save/copy/restore, using installed
+game/content paths and private outputs under `.manager/staging`. Native bulk
+creation becomes an in-memory draft until confirmed Save. No filesystem RCON
+command is used. Native content has text output; structured map/mode pickers
+continue to use RCON's documented entries/reference schema.
+
+Explicit configuration Apply renders a private candidate beside dedicated.toml
+(preserving relative paths), validates it with the native CLI, then atomically
+replaces the managed TOML with backup and a digest check for intervening edits.
+The controller then independently requests RCON reload, retaining the actual
+server reply and optional reload control events. Failed validation leaves TOML
+intact; failed reload leaves saved files and reports an unconfirmed live state.
+Native staging strips Startup defaults and disables updates. JSON overrides
+remain version 1; no persistent layout migration is needed.
 
 ## Storage and trust
 
@@ -69,7 +84,7 @@ are shared between processes.
 
 RCON stays loopback-only inside the container. The local CLI discovers its
 credentials/host key from upstream files; they are not passed as argv flags.
-The actual 0.9.13 CLI was tested against a fake WebSocket endpoint: it sends its
+The actual 0.9.13 and 0.9.20 CLIs were tested against a fake WebSocket endpoint: each sends its
 argv as `command` plus structured `args`, so the original bridge's `shlex.split`
 approach is retained. Never join tokens into one CLI argument: the CLI treats
 that as a command name. There is no shell interpolation in menu operations.
@@ -82,4 +97,9 @@ privileged user replacing directories during a filesystem operation.
 
 The existing Startup `eval` substitution is unchanged and remains privileged
 Panel configuration, outside menu input handling. No new general shell executor,
-network service, automatic Workshop installer, deployment or publication is added.
+network service or automatic Workshop installer is added. The isolated .20
+publication uses the existing guarded manual workflow; it does not deploy.
+
+The .13/.20 upstream entrypoint scripts are byte-identical, with matching
+metadata/permissions/layout contracts. See [the audit](UPSTREAM-0.9.20.md) and
+[capability matrix](CAPABILITIES.md).

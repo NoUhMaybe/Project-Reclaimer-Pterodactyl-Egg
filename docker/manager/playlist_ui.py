@@ -9,22 +9,16 @@ class PlaylistWorkflow:
         return (yield from self.choose("playlist", self.playlists.store.names()))
 
     def validate(self, name, data):
-        maps, modes = self.inventory()
+        native = self.native and self.live.capabilities.supports("playlist_cli")
+        maps, modes = (None, None) if native else self.inventory()
         errors = self.playlists.validate(data, maps, modes)
         if errors:
             raise ValueError("\n".join(errors))
-        self.emit("Local structural/inventory validation passed. Engine option keys, hidden saved-map dependencies and map-ID conflicts are not fully verified.")
-        if self.live.capabilities.supports("playlist_cli") and name:
-            # Native validator is a filesystem operation, never an RCON command.
-            import subprocess
-            try:
-                result = subprocess.run(["dedicated", "playlist", "show", "playlists/" + name],
-                                        cwd=self.content.server, capture_output=True, text=True, timeout=15, check=False)
-            except (OSError, subprocess.TimeoutExpired):
-                raise ValueError("Native playlist validator unavailable/timed out; no activation applied.") from None
-            if result.returncode:
-                raise ValueError("Native playlist validation failed; inspect the file with the upstream validator.")
-            self.emit("Native playlist show completed successfully.")
+        if native:
+            self.emit(self.native.validate_playlist(data))
+            self.emit("Native playlist show validated the staged candidate before any active file was written. Actual match compatibility still needs live validation.")
+        else:
+            self.emit("Local structural/inventory validation passed. Engine option keys, hidden saved-map dependencies and map-ID conflicts are not fully verified.")
         return maps, modes
 
     def playlist_action(self, choice):
@@ -49,7 +43,25 @@ class PlaylistWorkflow:
             maps, modes = self.validate(None, data)
             yield from self.confirm("restore playlist; existing target will be backed up")
             self.playlists.restore(backup, target, maps, modes)
-            self.emit("Restored. Restart required if this playlist is active on 0.9.13.")
+            self.playlist_saved()
+            return
+        if choice == 10:
+            if not self.native or not self.live.capabilities.supports("playlist_cli"):
+                raise ValueError("Native bulk authoring requires 0.9.15+ and an available native CLI.")
+            filename = yield from self.ask("New playlist filename", self.playlists.filename)
+            if self.playlists.store.path(filename).exists():
+                raise ValueError("File exists; use Edit instead.")
+            name = yield from self.ask("Playlist display name")
+            seconds = yield from self.ask("Voting duration", self.number(5, 120), 20)
+            self.reply(self.live.run(["maps"]))
+            maps = yield from self.ask("Map references separated by commas")
+            self.reply(self.live.run(["modes"]))
+            modes = yield from self.ask("Mode references separated by commas")
+            data = self.native.create_playlist(name, [m.strip() for m in maps.split(",")], [m.strip() for m in modes.split(",")], seconds)
+            self.validate(None, data)
+            self.draft, self.filename, self.expected = data, filename, None
+            self.section = "draft"
+            self.emit("Native playlist new prepared a private draft. Preview/edit it, then choose Save; nothing active was overwritten.")
             return
         name = yield from self.select_playlist()
         data = self.playlists.load(name)
@@ -64,12 +76,12 @@ class PlaylistWorkflow:
             self.validate(name, data)
             self.emit(self.playlists.preview(data))
             if choice == 4:
-                yield from self.confirm("make playlist authoritative over Startup PLAYLIST/MAP/GAME_TYPE at next start; no running match interrupted")
+                yield from self.confirm("save authoritative playlist selection over Startup PLAYLIST/MAP/GAME_TYPE; apply/reload or restart separately; no running match interrupted by this save")
                 # The operator may have changed the file over SFTP while the
                 # confirmation was pending. Validate the current copy again.
                 self.validate(name, self.playlists.load(name))
                 self.configuration.activate(name)
-                self.emit("Playlist activation saved. Restart through Panel when ready; current rotation is unchanged.")
+                self.emit("Playlist selection saved as a pending override. Apply with Configuration 7 (reload) or restart. Changing from a single map/variant to a playlist may require an idle restart.")
         elif choice in (5, 8):
             maps, modes = self.validate(name, data)
             target = yield from self.ask("New copy filename", self.playlists.filename)
@@ -139,7 +151,13 @@ class PlaylistWorkflow:
                 yield from self.confirm("save " + self.filename + "; previous version will be backed up")
                 self.playlists.save(self.filename, draft, maps, modes, expected=self.expected)
                 self.expected = self.playlists.store.digest(self.filename)
-                self.emit("Playlist saved atomically. On 0.9.13, restart to apply edits to a running rotation.")
+                self.playlist_saved()
         elif choice == 8:
             draft["name"] = yield from self.ask("Playlist display name")
+
+    def playlist_saved(self):
+        if self.live.capabilities.supports("reload"):
+            self.emit("Playlist saved atomically after validation. Upstream auto-reload may pick up edits to an active file; use Configuration 7 to request/confirm reload. A loaded rotation changes from the next vote, not the current ballot/game.")
+        else:
+            self.emit("Playlist saved atomically. Restart required on 0.9.13; the loaded rotation has not changed.")
 

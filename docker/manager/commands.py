@@ -25,11 +25,13 @@ class LiveOperations:
         tokens = [tokens[0].lower(), *tokens[1:]]
         if not self.capabilities.supports(tokens[0]):
             return Reply(False, f"{tokens[0]} is unavailable on {self.capabilities.version}; admin/pardon need 0.9.16, reload needs 0.9.18.")
-        if self.client.enabled and ((tokens[0] in ("map", "mode", "load", "nextmap", "team", "teamcount") and len(tokens) > 1) or tokens[0] == "shuffle"):
+        if self.client.enabled and ((tokens[0] in ("map", "mode", "load", "nextmap", "team", "teamcount") and len(tokens) > 1) or tokens[0] in ("shuffle", "reload")):
             self.client.events.start()
             self.request_time = time.monotonic()
-        reply = self.client.execute(tokens, json_reply=True)
-        if reply.ok and reply.data is not None:
+        # Reload replies contain the authoritative timing/result text. Do not
+        # replace it with a null JSON data payload from the CLI.
+        reply = self.client.execute(tokens, json_reply=tokens[0] != "reload")
+        if reply.ok and reply.data is not None and tokens[0] != "reload":
             formatted = structured(tokens[0], reply.data)
             if formatted:
                 reply.text = formatted
@@ -44,7 +46,7 @@ class LiveOperations:
         queried_at = time.monotonic()
         reply = self.run(["status"])
         for event in self.client.events.since(self.request_time):
-            if event.get("action") in ("load", "team", "shuffle", "teamcount"):
+            if event.get("action") in ("load", "team", "shuffle", "teamcount", "reload", "reload_applied"):
                 outcome = "completed" if event.get("ok") else "FAILED"
                 reply.text += "\nObserved control event: " + str(event.get("action")) + " " + outcome + ": " + str(event.get("text", ""))
                 if event.get("action") == "load":
@@ -80,7 +82,7 @@ class LiveOperations:
                     return rotation_reply
                 rotation = payload(rotation_reply.data)
                 if isinstance(rotation, dict) and "rotation" in rotation and not rotation["rotation"]:
-                    return Reply(False, "Playlist voting requires an active rotation loaded by the running server; restart after saving activation.")
+                    return Reply(False, "Playlist voting requires an active rotation loaded by the running server; apply/reload or restart after saving activation, then inspect nextmap.")
             if kind in ("endround", "shuffle") and state.get("phase") not in (None, "playing"):
                 return Reply(False, "This vote requires an active round.")
             if kind == "shuffle" and state.get("team_game") is False:

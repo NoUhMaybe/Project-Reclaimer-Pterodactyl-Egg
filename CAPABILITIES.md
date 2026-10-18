@@ -1,65 +1,91 @@
 # Console manager compatibility matrix
 
-The Dockerfile remains pinned to **0.9.13**. No upgrade is necessary for this
-implementation, and the existing published image is the rollback option.
-`RECLAIMER_IMAGE_VERSION` records the build argument; it is not proof of the
-runtime version when upstream auto-update is enabled. Gates use the build version
-conservatively, and unknown/nonrelease build tags disable guided runtime features.
-Raw RCON remains available for explicit operator use outside the manager.
+This branch pins **0.9.20**. The original `feature/console-manager` branch and
+`console-manager-pr5-test.1` image retain 0.9.13 for rollback. Build-version
+gates disable unknown/nonrelease tags; raw RCON remains available. Diagnostics
+reports the actual executable separately from the pin. Automatic updates remain
+disabled by default; explicit existing operator choices are preserved. Clients
+must match the server's exact Project Reclaimer version.
 
-Evidence checked October 18, 2026:
+## Evidence and limits
 
-- [Official hosting guide](https://projectreclaimer.dev/host), including its
-  playlist reference, environment precedence, content layout and version notes.
-- [0.9.13 release](https://github.com/ProjectReclaimer/project-reclaimer-releases/releases/tag/v0.9.13)
-  and its [versioned RCON reference](https://github.com/ProjectReclaimer/project-reclaimer-releases/releases/download/v0.9.13/RCON.md).
-- Actual official 0.9.13 dedicated executable `--help`, `dedicated --help`,
-  `dedicated rcon --help`; its dedicated subcommands contain **no** `playlist`,
-  `content` or `reload`. Binary SHA256:
-  `afe11ddc1bd57b451f668e820d4236c1eea44798fff365eecd680d6dc8122a91`.
-- Actual CLI against a loopback mock WebSocket endpoint, verifying structured
-  argument transport and JSON data output without game assets.
+Checked October 18, 2026 against the [hosting guide](https://projectreclaimer.dev/host),
+[latest release](https://github.com/ProjectReclaimer/project-reclaimer-releases/releases/latest),
+notes for [0.9.15](https://github.com/ProjectReclaimer/project-reclaimer-releases/releases/tag/v0.9.15),
+[0.9.16](https://github.com/ProjectReclaimer/project-reclaimer-releases/releases/tag/v0.9.16),
+[0.9.17](https://github.com/ProjectReclaimer/project-reclaimer-releases/releases/tag/v0.9.17),
+[0.9.18](https://github.com/ProjectReclaimer/project-reclaimer-releases/releases/tag/v0.9.18),
+[0.9.19](https://github.com/ProjectReclaimer/project-reclaimer-releases/releases/tag/v0.9.19)
+and [0.9.20](https://github.com/ProjectReclaimer/project-reclaimer-releases/releases/tag/v0.9.20),
+and their versioned RCON.md release assets (example:
+[0.9.20 RCON](https://github.com/ProjectReclaimer/project-reclaimer-releases/releases/download/v0.9.20/RCON.md)).
+The official 0.9.14 release API returned **404** and its versioned reference was
+unavailable. The guide attributes friendly fire to 0.9.14; that attribution is
+marked below rather than claiming an unavailable artifact was verified.
 
-“Mock” below means automated menu/backend tests, not a live Halo engine test.
-All gameplay effects of this change require the [Wings checklist](WINGS-VALIDATION.md).
+Actual official Windows binaries, checksum verified:
 
-| Feature | Upstream requirement | Mechanism | Live | File changes | Restart | Implementation / testing |
-| --- | --- | --- | --- | --- | --- | --- |
-| Menu/navigation/raw return | Wrapper | Existing bridge `menu`, `manager`, `console help` | Yes | No | No | Implemented; portable and Linux-only supervisor tests |
-| Status/current game/round/count | 0.9.13 documented | RCON `status` | Yes | No | No | Implemented; mock JSON/empty states |
-| Maps/modes/saved variants | 0.8.14+; 0.9.13 confirmed | RCON `maps`, `modes`, `entries.reference` | Yes | Read only | New uploads: yes on 0.9.13 | Implemented; versioned schema fixture |
-| Change map/mode/both | 0.8.14+ | RCON `map`, `mode`, `load` | Queued lobby transition; active game ends | No | No | Implemented with confirmation; mock acceptance/status/event failures |
-| Next game/override inspection | 0.8.14+ | RCON `nextmap` | Next lobby, current game continues | No | No | Implemented; mock selection/rotation |
-| Round/game end | 0.9.13 documented | RCON `endround`, `endgame` | Yes | No | No | Implemented with confirmation; mock cancellation |
-| Completion events | 0.9.13 confirmed | Local CLI `rcon --json --watch`, `control` | Best effort stream | No | No | Implemented; parser/retention tests; real event/game behavior unverified |
-| Playlist ballots/moderation votes | 0.8.14+ | RCON `vote`, `startvote`, `passvote`, `cancelvote` | Prerequisites apply | No | Active rotation must already be loaded | Implemented; mock phase/count/rotation/errors |
-| Players, teams, telemetry | 0.9.13 documented | RCON `players` | Yes | No | No | Implemented; missing fields displayed honestly; mock IDs/empty states |
-| Global/private announcements | 0.9.13 documented | RCON `say`, `tell` | Yes | Chat logs upstream | No | Implemented with confirmation; stable target selection |
-| Kick / timed or permanent bans | 0.9.13 documented | RCON `kick`, `ban` | Yes | Engine writes ban list for bans | No | Implemented; mock stable-ID/timed-ban command assertions |
-| Bans/unban | 0.9.13 documented | RCON `bans`, `unban` | Yes | Engine updates linked entries | No | Implemented with confirmation; engine decides ambiguous matches |
-| Mute/unmute | 0.9.13 documented | RCON `mute`, `unmute` | Yes | No persistent menu file | Cleared by restart | Implemented; duration also available through raw command |
-| Team move/shuffle/redistribution | Team move 0.9.0+ | RCON `team`, `shuffle`, `teamcount` | Requires valid teams/round | No | No | Implemented with confirmation; engine authority for team constraints |
-| VPN allowlist | 0.9.2+ | RCON `vpn`, `vpnallow`, `vpnrevoke` | Shared ban-list scope | Engine persists allowances | No | Implemented with confirmation; menu command construction |
-| Admin list/add/remove; kick pardon | **0.9.16+** | RCON `admins`, `admin`, `pardon` | On compatible builds | Engine-managed | No | Visible but gated on 0.9.13; gate tests; newer engine unverified |
-| Playlist create/edit/copy/import/delete | Version 2 on 0.9.13 | Local Python JSON editor under `server/playlists` | Edits do not update loaded engine | Yes, atomic + backup | 0.9.13: yes | Implemented; full menu create/edit/save/duplicate/restore tests |
-| Playlist structure/content validation | 0.9.13 local fallback | Injected running inventories + bounded reads | Validation only | Read only | No | Implemented; conservative, not full option or dependency validation |
-| Official playlist/content CLI | **0.9.15+** | `dedicated playlist show`; other authoring remains local | No runtime effect | Validator reads files | No | Existing-file validator gated; never called on 0.9.13; newer binary unverified |
-| Persistent playlist activation | Wrapper + upstream per-server precedence | `.manager/overrides.json` -> managed TOML at boot | No | Yes | **Yes** | Implemented; tested across repeated configure runs and conflicting Startup values |
-| Mod packages/metadata inspection | Existing content directories | Local bounded traversal | Shows disk state | Read only | No | Implemented; metadata shown without inferring compatibility |
-| Manual mod upload | 0.9.13 layout | File Manager/SFTP -> `content/Mods` | No | Uploaded by operator | **Yes** | Documented; no Steam/SteamCMD downloader |
-| Mod enable/disable | Official documented packages list | `content/disabled-mods.json` | No | Atomic + backup | **Yes** | Implemented; preserve unknown fields; live engine switch unverified |
-| Custom vote images | **0.9.13+** | `preview_image`, `content/Images` | Next loaded rotation | Yes, manual upload | 0.9.13: yes | Implemented signature/size/path validation; no image decoder |
-| Live server name/ping | Name 0.8.14+, ping 0.9.2+ | RCON `servername`, `maxping` | Yes | No | Lost at restart | Implemented; separated from persistence |
-| Guided persistent server settings | 0.9.13 fields only | Manager overrides -> managed `[[server]]` | No | Atomic + backup | **Yes** | Implemented; scalar/range/policy checks; engine semantics need Wings |
-| Join/RCON passwords, ports, paths | Existing egg/upstream | Startup/admin files | Static guided policy | Startup files/env | Yes | Password entry excluded from menu due to Panel echo/history; raw commands preserved |
-| Friendly fire policy | **0.9.14+** | `friendly_fire` | Newer version behavior | TOML | 0.9.13 unsupported | Explained, not offered as a working 0.9.13 setting |
-| Welcome / independent voice scopes | **0.9.15+** | `welcome`, `voice_global/team/proximity` | Newer version behavior | TOML | 0.9.13 unsupported | Explained; no unsupported fields generated |
-| Character mod settings | **0.9.18+** | `customization`, related settings | Newer version behavior | TOML | Idle restart in newer versions | Explained; unavailable on 0.9.13 |
-| Config/content live reload | **0.9.18+** | RCON `reload` | Immediate/next vote/idle restart by upstream | Changes read from files | Version/setting dependent | Raw escape gated; menu persistence intentionally next-start; no automatic restart/reload |
-| Health/log diagnostics | Wrapper | RCON + bounded asset/prefix/log reads | Snapshot | Read only | No | Implemented; presence/last-request checks, filtered excerpts |
-| Non-root, Wine, WAN, multiplayer, Stop/Start | Existing egg regression baseline | Unchanged upstream launch/group/output path | Yes | Persistent volume retained | Existing behavior | Existing user-reported working baseline; this change's live regression run pending |
+| Version | Dedicated executable SHA256 | Verified without game assets |
+| --- | --- | --- |
+| .13 | `afe11ddc1bd57b451f668e820d4236c1eea44798fff365eecd680d6dc8122a91` | Version, help, structured RCON arguments against loopback fixture |
+| .20 | `e0d0861b265109cd623e2c991b63c60f08512bca2ae2bc028cb0af996c7bfe3d` | Above plus playlist/content/reload help, new TOML fields parsing, invalid camera rejection, validation failing safely without assets |
+| .20 image bundle | `15c2b745e2c7dd1563a69f9fa09ba399ac3702eb3da200afa8d42d9a271f03d7` | Distinct upstream build extracted from the official image layer; actual --version is .20; same CLI/protocol/parser probes |
 
-The current guide documents releases newer than the image pin. In particular,
-0.9.18 reload timing must not be attributed to 0.9.13. This manager never restarts
-a server on its own. The previous image and unmodified Startup settings remain
-available for rollback; see [the console guide](CONSOLE-MANAGER.md#diagnostics-security-and-rollback).
+CI Test F also runs the actual bundled binary under Wine as a non-root UID,
+checking checksum/version and native CLI availability. Successful native
+authoring/validation requires owned game assets and is **not** established by
+mocks or missing-asset tests. Engine effects, LAN/WAN and multiplayer await
+[Wings validation](WINGS-VALIDATION.md). See [the image audit](UPSTREAM-0.9.20.md).
+
+## Per-version availability
+
+`R` = documented RCON; `C` = local upstream CLI; `F` = persistent files;
+`S` = restart; `A` = automatic engine improvement; `—` = absent; `?` = .14
+artifact unavailable. Intermediate-version support comes from versioned docs,
+not execution of every historical binary. Actual binaries checked: .13 and .20.
+
+| Functionality | .13 | .14 | .15 | .16 | .17 | .18 | .19 | .20 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Maps/modes/status/next game/match control/votes/players/moderation | R | ? | R | R | R | R | R | R |
+| Version-2 playlists, Python editor, manual content/mods | F/S | ? | F/S | F/S | F/S | F + reload/S | same | same |
+| Native playlist new/show/list, content | — | ? | C | C | C | C | C | C |
+| Friendly fire | — | F/S (guide) | F/S | F/S | F/S | F + reload, next game | same | same |
+| Welcome, independent voice scopes | — | ? | F/S | F/S | F/S | F + reload | same | same |
+| Admin list/add/remove, kick pardon | — | ? | — | R | R | R | R | R |
+| Campaign trust_player_games | — | ? | — | F/S | F/S | F + reload | same | same |
+| Reduced idle/lobby CPU, shared gameplay improvements | — | ? | — | — | A | A | A | A |
+| Config/content reload and reload control events | — | ? | — | — | — | R/C + F | same | same |
+| Character-pack configuration | — | ? | — | — | — | F, idle S | F, expanded packs | same |
+| Expanded ODST co-op/Firefight, dedicated crash fixes | — | ? | — | — | — | — | A, owned assets | same |
+| Server camera policy | — | ? | — | — | — | — | — | F + reload, next game |
+
+The menu/session/process architecture is independent of these engine features.
+No client-only Theater, renderer, input or appearance UI was added. Character-pack
+and campaign/ODST authoring remain administrator-file operations; this egg's
+asset preflight and guided gameplay scope remain Halo 3.
+
+## 0.9.20 operations and timing
+
+| Operation | Backend | Application timing / test evidence |
+| --- | --- | --- |
+| Maps/modes/load, nextmap, endround/endgame | RCON | Engine transition/next lobby; acceptance differs from completion. Real structured transport, menu tests; gameplay pending |
+| Votes, players, say/tell, kick/ban/unban/mute/team/VPN | RCON | Runtime, engine prerequisites/shared ban-list scope apply; existing regression tests, live pending |
+| Admins/add/remove, pardon | RCON admins/admin/pardon | Runtime, engine-managed persistence; .20 reference/stable-ID tests, live pending |
+| Playlist create/edit/copy/restore | Python files + staged native playlist show | Atomic save; active files may auto-reload from next vote. Paths/conflicts/backups tested; native success with assets pending |
+| Bulk authoring | Staged native playlist new | Private draft until confirmed Save; arguments/draft tests, actual positive authoring pending |
+| Native content discovery | dedicated content --config <private config> [search] | Read-only installed inventory, text output (no invented JSON flag); real help and UI tests, asset inventory pending |
+| Playlist activation / setting edit | .manager/overrides.json v1 | Pending until Configuration 7 or startup generates TOML; legacy state/Startup precedence tested |
+| Apply/reload | Native-validated atomic TOML, then independent RCON reload | Actual server timing reply plus optional reload/reload_applied events; failed candidate writes nothing; rejected reply not called success |
+| name/host_name/password/player limits/ping/load_timeout/welcome/admins/votes/voice/text/mod sharing/trust | Persistent TOML + reload | Immediate when confirmed, except name changing data folder needs idle restart; new field parsing verified, live effects pending |
+| friendly_fire/team_changing/camera | Persistent TOML + reload | Next multiplayer game; campaign/ODST game settings can idle-restart; real camera enum/parser and UI timing tests |
+| Ports/RCON, hidden/chat_log/block_vpn/anti_cheat, data-folder rename, content type/customization | Startup/admin TOML + reload | Idle restart or explicit container restart; engine timing from guide, no forced restart |
+| Mod upload/replacement/enable/disable | Manual upload, content/disabled-mods.json | Restart required; atomic switch/unknown-field preservation tests, engine compatibility pending |
+| Diagnostics | Executable --version, image pin, RCON/files | Snapshot; reports executable/pin mismatch, never invents individual client versions |
+| Menu/raw return, Stop, unexpected child exit | Existing bridge | Portable menu and Linux process-group tests; live regression pending |
+
+Camera values: `first_person`, `player_choice`, `third_person`. On-foot multiplayer
+policy; modes built around third person (including UNSC vs Covenant classes) and
+vehicle views retain their own cameras. Campaign co-op and Firefight are unaffected.
+Saving a setting never proves live application. Upstream `auto_reload` defaults to
+true from .18, so direct playlist/admin-file edits may independently reload; the
+manager does not suppress that existing policy.

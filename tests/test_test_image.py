@@ -21,6 +21,13 @@ class TestImageGuards(unittest.TestCase):
     def test_explicit_trusted_sha_and_experimental_tag(self):
         self.assertEqual(self.inputs(), "console-manager-pr5-sha-" + SHA)
 
+    def test_upgrade_branch_requires_its_own_version_and_tag_namespace(self):
+        values = dict(ref=test_image.UPGRADE_BRANCH, upstream="0.9.20", tag="console-manager-pr5-reclaimer-0.9.20-test.1")
+        self.assertEqual(self.inputs(**values), "console-manager-pr5-reclaimer-0.9.20-sha-" + SHA)
+        for changes in ({"upstream": "0.9.13"}, {"tag": "console-manager-pr5-test.2"}, {"ref": test_image.BRANCH}):
+            with self.assertRaises(ValueError):
+                self.inputs(**dict(values, **changes))
+
     def test_release_tags_and_shell_like_tags_rejected(self):
         for tag in ("latest", "v0.1.0", "v0.1.0-dev.5", "console-manager-pr5-test.0", "console-manager-pr5-test.1;echo", "console-manager-pr5-test.1\nlatest", "../tag"):
             with self.subTest(tag=tag), self.assertRaises(ValueError):
@@ -50,6 +57,17 @@ class TestImageGuards(unittest.TestCase):
         with self.assertRaises(ValueError):
             test_image.validate_pr(pr, "b" * 40)
 
+    def test_upgrade_pr_cannot_be_a_fork_or_target_main(self):
+        pr = {"state": "open", "merged": False,
+              "head": {"repo": {"full_name": test_image.REPOSITORY}, "ref": "feature/console-manager-upstream-0.9.20", "sha": SHA},
+              "base": {"repo": {"full_name": test_image.REPOSITORY}, "ref": "feature/console-manager"}}
+        test_image.validate_pr(pr, SHA, test_image.UPGRADE_BRANCH)
+        for key, value in (("ref", "main"), ("repo", {"full_name": "attacker/repo"})):
+            bad = copy.deepcopy(pr)
+            bad["base"][key] = value
+            with self.assertRaises(ValueError):
+                test_image.validate_pr(bad, SHA, test_image.UPGRADE_BRANCH)
+
     def test_image_architecture_revision_upstream_and_tini_are_required(self):
         value = {"os": "linux", "architecture": "amd64", "config": {
             "Labels": {"org.opencontainers.image.revision": SHA, "org.opencontainers.image.source": "https://github.com/" + test_image.REPOSITORY},
@@ -65,10 +83,18 @@ class TestImageGuards(unittest.TestCase):
         broken["config"]["Entrypoint"] = ["sh"]
         with self.assertRaises(ValueError):
             test_image.metadata(broken, SHA)
+        upgraded = copy.deepcopy(value)
+        upgraded["config"]["Env"] = ["RECLAIMER_IMAGE_VERSION=0.9.20"]
+        test_image.metadata(upgraded, SHA, "0.9.20")
+        with self.assertRaises(ValueError):
+            test_image.metadata(upgraded, SHA, "0.9.13")
 
     def test_existing_test_tag_aborts_before_snapshot_or_push(self):
         pr = {"state": "open", "merged": False, "head": {"repo": {"full_name": test_image.REPOSITORY}, "ref": "feature/console-manager", "sha": SHA}}
-        with patch.dict(test_image.os.environ, {"SOURCE_SHA": SHA, "TEST_TAG": "console-manager-pr5-test.1"}), \
+        with patch.dict(test_image.os.environ, {"SOURCE_SHA": SHA, "TEST_TAG": "console-manager-pr5-test.1",
+                                              "GITHUB_REPOSITORY": test_image.REPOSITORY, "GITHUB_EVENT_NAME": "workflow_dispatch",
+                                              "GITHUB_REF": test_image.BRANCH, "GITHUB_SHA": SHA,
+                                              "UPSTREAM_VERSION": "0.9.13", "TAG_LATEST": "false"}), \
              patch.object(test_image, "api", return_value=pr), \
              patch.object(test_image, "Registry") as registry, \
              patch.object(test_image.Path, "write_text") as write:

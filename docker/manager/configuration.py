@@ -1,4 +1,5 @@
-"""Persistent explicit overrides; applied by configure.py on next start."""
+"""Persistent overrides; explicitly materialized for reload or applied at startup."""
+import hashlib
 import os
 from .filesystem import Store
 
@@ -10,7 +11,22 @@ SETTINGS = {
     "block_vpn": ("bool",), "hidden": ("bool",), "votes": ("bool",),
     "team_changing": ("balanced", "game_type", "off"), "voice": ("bool",), "voice_team_only": ("bool",),
     "text_chat": ("bool",), "share_mods": ("bool",), "share_rate": ("int", 0, 1000000),
+    "friendly_fire": ("bool",), "welcome": ("text", 0, 300),
+    "voice_global": ("bool",), "voice_team": ("bool",), "voice_proximity": ("bool",),
+    "load_timeout": ("int", 0, 600), "trust_player_games": ("bool",),
+    "camera": ("first_person", "player_choice", "third_person"),
 }
+
+NEXT_GAME = {"friendly_fire", "team_changing", "camera"}
+IDLE_RESTART = {"name", "hidden", "block_vpn", "anti_cheat"}
+
+
+def timing(key):
+    if key in NEXT_GAME:
+        return "after reload, from the next multiplayer game; campaign/ODST game settings can require an idle restart"
+    if key in IDLE_RESTART:
+        return "after reload, when the server is empty (name may change its data folder); no forced match restart"
+    return "after a confirmed reload, immediately for subsequent admission/game communication"
 
 
 def validate_setting(key, value):
@@ -70,3 +86,16 @@ class Configuration:
 
     def reset(self):
         self.store.write("overrides.json", {"version": 1, "settings": {}})
+
+    def materialize(self, native):
+        # Import only the existing sentinel renderer, never process supervision.
+        from configure import patch_existing, render_server_block
+        store = Store(self.store.root.parent)
+        original = store.read_bytes("dedicated.toml").decode("utf-8")
+        updated, appended = patch_existing(original, render_server_block(self.env, self.read()))
+        if appended:
+            raise ValueError("Managed block is missing. Restart to repair it before using live reload.")
+        native.validate_configuration(updated)
+        if updated != original:
+            store.atomic_bytes("dedicated.toml", updated.encode("utf-8"), expected=hashlib.sha256(original.encode("utf-8")).hexdigest())
+        return "Managed TOML prepared atomically; running state must be confirmed by the RCON reload reply."

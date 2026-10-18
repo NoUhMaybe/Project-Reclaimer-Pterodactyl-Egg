@@ -1,7 +1,7 @@
 #!/bin/bash
 # Runtime test orchestrator.
 #
-# Runs Tests A, B, C and E (all automatable against a disposable Docker
+# Runs Tests A, B, C, E and F (all automatable against a disposable Docker
 # host, no game assets required) and then explicitly reports Test D as
 # requiring manual execution — it is never silently skipped or claimed as
 # passed.
@@ -42,6 +42,7 @@ run_test "Test A — missing assets" test-runtime-a-missing-assets.sh
 run_test "Test B — configuration generation" test-runtime-b-configuration.sh
 run_test "Test C — non-root filesystem" test-runtime-c-nonroot-fs.sh
 run_test "Test E — Wine prefix initialization and persistence" test-runtime-e-wine-prefix.sh
+run_test "Test F — upstream executable and native CLI" test-runtime-f-upstream-cli.sh
 
 echo ""
 echo "=============================================================="
@@ -58,4 +59,4 @@ if [ "$failures" -ne 0 ]; then
     echo "RESULT: $failures automated test(s) failed."
     exit 1
 fi
-echo "RESULT: all automated tests (A, B, C, E) passed. Test D remains manual — see above."
+echo "RESULT: all automated tests (A, B, C, E, F) passed. Test D remains manual — see above."

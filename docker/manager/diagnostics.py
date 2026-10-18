@@ -2,12 +2,30 @@
 import re
 
 
+def versions(native, capabilities, env):
+    detected = "unavailable (no runtime inference from the image label)"
+    if native:
+        try:
+            detected = native.version()
+        except ValueError:
+            pass
+    lines = ["Pinned image upstream: " + capabilities.version, "Detected dedicated executable: " + detected,
+             "Command capabilities: " + capabilities.summary(),
+             "Clients and server must use exactly the same Project Reclaimer version. Individual client versions are not exposed by documented RCON; mismatch is not inferred from player names or counts.",
+             "Automatic updates: " + ("explicitly enabled in Startup; the running version can differ from the pin" if env.get("AUTO_UPDATE", "0").lower() in ("1", "true") else "disabled by default; this upgrade does not enable them")]
+    match = re.search(r"\b(\d+\.\d+\.\d+)\b", detected)
+    if match and match.group(1) != capabilities.version.lstrip("v"):
+        lines.append("VERSION MISMATCH: detected executable differs from the pin; capability gates remain conservative. Verify matching clients before testing.")
+    lines.append("Native CLI authoring needs installed assets. Mod replacement still requires restart. Camera is on-foot multiplayer policy; campaign/Firefight, vehicles and modes with fixed cameras are exceptions.")
+    return "\n".join(lines)
+
+
 def report(content, configuration, client, capabilities, child):
     lines = ["Process: " + ("running" if child.poll() is None else "exited"),
              "RCON: " + ("last request connected" if client.connected else "disabled / not yet connected / unavailable"),
              "Image upstream build: " + capabilities.version + " (runtime auto-update may differ)",
              "Allocation: UDP " + configuration.env.get("SERVER_PORT", "unknown") + "; RCON loopback TCP only",
-             "Manager overrides (next start): " + str(configuration.read())]
+             "Manager overrides (file state; reload/startup status must be confirmed): " + str(configuration.read())]
     for relative in ("game/halo3/halo3.dll", "game/halo3/maps/shared.map"):
         path = content.server / relative
         lines.append(relative + ": " + ("present" if path.is_file() else "MISSING"))
