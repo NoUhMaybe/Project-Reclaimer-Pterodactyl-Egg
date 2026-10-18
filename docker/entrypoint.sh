@@ -57,7 +57,7 @@ WINE_PREFIX_DIR="$HOME/.wine-prefix"
 export WINEPREFIX="$WINE_PREFIX_DIR"
 
 mkdir -p "$SERVER_DIR/game" "$SERVER_DIR/content/Maps" "$SERVER_DIR/content/Game Modes" \
-         "$SERVER_DIR/content/Mods" "$SERVER_DIR/playlists" "$SERVER_DIR/data" \
+         "$SERVER_DIR/content/Mods" "$SERVER_DIR/content/Images" "$SERVER_DIR/playlists" "$SERVER_DIR/data" \
          "$CACHE_DIR" "$WINE_PREFIX_DIR"
 
 for path in /server /cache /home/reclaimer/.wine; do
