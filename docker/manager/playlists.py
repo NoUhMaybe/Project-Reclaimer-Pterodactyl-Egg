@@ -16,10 +16,19 @@ def filename(name):
     return name
 
 
+def safe_reference(value):
+    if not isinstance(value, str) or not value or value.startswith("/") or "\\" in value or any(p in ("..", ".", "") for p in value.split("/")) or any(ord(c) < 32 for c in value):
+        raise ValueError("Content references must stay inside installed content; traversal and absolute paths are not allowed.")
+    if ":" in value and not re.fullmatch(r"workshop:\d+/[^/:]+", value, re.I):
+        raise ValueError("Only documented workshop:ID/map references may contain a colon.")
+    return value
+
+
 class Playlists:
-    def __init__(self, server_dir, content):
+    def __init__(self, server_dir, content, native=None):
         self.store = Store(content.server / "playlists")
         self.content = content
+        self.native = native
 
     def filename(self, name):
         filename(name)
@@ -43,8 +52,8 @@ class Playlists:
         if not isinstance(games, list) or not 3 <= len(games) <= 128:
             return errors + ["A playlist needs 3-128 games."]
         seen, images, modmaps, packages = set(), set(), set(), set()
-        mapnames = {m.casefold() for m in maps}
-        modenames = {m.casefold() for m in modes}
+        mapnames = {m.casefold() for m in maps} if maps is not None else None
+        modenames = {m.casefold() for m in modes} if modes is not None else None
         for index, entry in enumerate(games, 1):
             prefix = f"Game {index}: "
             if not isinstance(entry, dict):
@@ -55,7 +64,11 @@ class Playlists:
                 if not isinstance(value, str) or not value.strip():
                     errors.append(prefix + key + " is required.")
                     continue
-                if value.casefold() not in available:
+                try:
+                    safe_reference(value)
+                except ValueError as exc:
+                    errors.append(prefix + str(exc))
+                if available is not None and value.casefold() not in available:
                     errors.append(prefix + key + " is not in the running server's installed inventory: " + value)
                 if value.startswith(folder + "/"):
                     try:
@@ -94,7 +107,11 @@ class Playlists:
                         errors.append(prefix + "invalid " + field)
             if "base_map" in entry:
                 base = entry["base_map"]
-                if not isinstance(base, str) or base.casefold() not in mapnames:
+                try:
+                    safe_reference(base)
+                except ValueError as exc:
+                    errors.append(prefix + str(exc))
+                if not isinstance(base, str) or mapnames is not None and base.casefold() not in mapnames:
                     errors.append(prefix + "base_map is not installed.")
                 elif base.lower().startswith("workshop:"):
                     modmaps.add(base.casefold())
@@ -132,6 +149,8 @@ class Playlists:
         errors = self.validate(data, maps, modes)
         if errors:
             raise ValueError("\n".join(errors))
+        if self.native:
+            self.native.validate_playlist(data)
         self.store.write(self.filename(name), data, expected=expected)
 
     def duplicate(self, source, target, maps, modes):

@@ -28,16 +28,21 @@ Complete [WINGS-VALIDATION.md](WINGS-VALIDATION.md) before accepting the manager
 | Symptom | Action |
 | --- | --- |
 | `menu` is treated as an unknown RCON command | The running wrapper image predates the manager. Build/test this branch under a separate tag after deployment approval; editing the egg alone does not update an image. |
-| RCON-disabled message | Set Enable RCON and an 8-128 character password in Startup; restart. Persistent menus remain available, but inventory-based validation needs RCON. |
+| RCON-disabled message | Set Enable RCON and an 8-128 character password in Startup; restart. Persistent/native file validation can work with assets, but live inventories/Apply need RCON. |
 | Authentication failure or timeout | Check startup, loopback RCON and synchronized configuration. Commands are not automatically retried because their outcome may be unknown. No password should be pasted into Console. |
 | Save rejects a map/mode after upload | 0.9.13 inventories describe content loaded at startup. Restart after uploads, use the listed exact reference and refresh. Engine-specific compatibility still needs verification. |
-| Active rotation still shows the old playlist | Activation is saved for next start. Restart when appropriate; saving overrides does not change the loaded rotation. Inspect `nextmap`, not just the file. |
+| Active rotation still shows the old playlist | Activation is pending. Use Configuration 7 to generate/validate TOML and request reload, or restart. Content-type changes can idle-restart; inspect `nextmap` and server reply. |
 | Startup PLAYLIST/settings seem ignored | Explicit manager overrides win. Configuration option 1 shows them; option 3 resets all manager settings/playlist authority for next start. |
 | File changed since opened | An SFTP/File Manager edit intervened. Reopen the playlist before saving; the manager refuses to overwrite that edit. |
 | Invalid path or symlinked storage | Use simple filenames inside playlists and real persistent storage directories. The manager refuses traversal and symlinks; no arbitrary file access is available. |
 | Command accepted but map did not change | Refresh status, inspect next-game override and game logs. Acceptance differs from observed completion/failure. Events may be missed and are not replayed. |
 | `startvote playlist` fails | The running server needs a valid loaded rotation and eligible lobby/player state. A pending activation is insufficient. Read the upstream prerequisite error. |
-| Admins/pardon/reload unavailable | They need 0.9.16/0.9.18 respectively. Keep the current 0.9.13 working pin unless a separate compatibility upgrade is approved. |
+| Admins/pardon/reload unavailable | They need .16/.18 respectively. This upgrade pins .20; Diagnostics 7 checks actual binary, pin and gates. The original .13 image intentionally gates them. |
+| Native validator rejects a candidate | Check owned game assets, installed content and upstream configuration. Candidate errors are sanitized because TOML can contain secrets. No failed candidate overwrites active files. |
+| Saved setting has no live effect | Edits remain pending until Apply/reload or startup. Read the actual reload reply: immediate, next game/vote or idle restart. Mods need restart. A failed reload is unconfirmed even though files remain saved. |
+| .20 client cannot join / binary differs from pin | Exact versions must match. Check Diagnostics 7 and client version manually. Individual client versions are not exposed by RCON. Keep AUTO_UPDATE off for pinned testing. |
+| Camera seems unchanged | After reload, test the next on-foot multiplayer game. Vehicles, modes with fixed third-person cameras, campaign co-op and Firefight retain their own behavior. |
+| Rollback image rejects overrides | Restore pre-upgrade overrides AND TOML, then use .13 clients. New .20 keys are not accepted by the older wrapper. See UPSTREAM-0.9.20.md. |
 | Mod disabled on disk but still running | Mod switches require restart. Validate affected playlists before restarting; the switch describes next-start state. |
 | Need to restore a playlist | Playlist option 9 validates/restores a selected `playlists/.backups` file, backing up an existing target first. |
 | Need to restore settings or image | Follow [rollback](CONSOLE-MANAGER.md#diagnostics-security-and-rollback); reset overrides and regenerate managed TOML before returning to an earlier image. |
@@ -47,7 +52,8 @@ Automated checks are `python -m unittest discover -s tests -v`. POSIX supervisor
 checks are Linux-only, pure Python logic runs on Windows, and the optional
 `RECLAIMER_TEST_BINARY` test exercises the real official CLI against a local fake
 WebSocket server without Halo assets. CI also runs shell syntax, ShellCheck,
-Docker build and runtime A/B/C/E. None substitute for the live Wings checklist.
+Docker build and runtime A/B/C/E/F. F verifies the actual bundled .20 binary
+checksum/version and CLI under Wine without assets. None substitute for Wings.
 
 ## Verified upstream image metadata
 
@@ -58,7 +64,7 @@ repeatable version of this check, run automatically against the live
 registry in CI):
 
 ```
-image:       ghcr.io/projectreclaimer/project-reclaimer-dedicated:0.9.13
+image:       ghcr.io/projectreclaimer/project-reclaimer-dedicated:0.9.20
 User:        root
 WorkingDir:  /server
 Entrypoint:  ["/usr/bin/tini", "--", "reclaimer-entrypoint"]
@@ -291,14 +297,13 @@ Be precise about this before relying on the egg in production.
    line, and add it to the egg's Startup Configuration in the Panel
    (Process Management → Startup Configuration).
 
-4. **The default pinned upstream version (`RECLAIMER_VERSION=0.9.13` in the
+4. **The default pinned upstream version (`RECLAIMER_VERSION=0.9.20` in the
    Dockerfile) has been confirmed to exist** via a live registry query (see
-   "Verified upstream image metadata" above) — but whether it remains the
-   newest/recommended release by the time you read this has not been
-   re-checked. Run `tests/test_dockerfile.py` (or `docker pull
-   ghcr.io/projectreclaimer/project-reclaimer-dedicated:0.9.13`) before
-   building, and update the Dockerfile's default `ARG` if a newer stable
-   release exists.
+   "Verified upstream image metadata" above). It was the official latest release
+   on October 18, 2026. Run `tests/test_dockerfile.py` (or pull that exact tag)
+   before building; review any future version change separately. The .13/.20
+   entrypoint scripts were byte-identical; full assessment and rollback identity
+   are in [UPSTREAM-0.9.20.md](UPSTREAM-0.9.20.md).
 
 5. **End-to-end gameplay has not been tested**: no client connected, no
    match was played, server-browser visibility from another network was

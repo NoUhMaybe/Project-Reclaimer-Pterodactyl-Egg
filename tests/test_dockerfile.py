@@ -63,7 +63,7 @@ def _fetch_upstream_config() -> dict:
         headers={"Authorization": f"Bearer {token}"},
     )
     with urllib.request.urlopen(config_blob_req, timeout=10.0) as resp:  # noqa: S310
-        return json.load(resp)["config"]
+        return json.load(resp)
 
 
 class DockerfileStaticTests(unittest.TestCase):
@@ -123,7 +123,8 @@ class UpstreamImageLiveTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         try:
-            cls.config = _fetch_upstream_config()
+            cls.image = _fetch_upstream_config()
+            cls.config = cls.image["config"]
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
             raise unittest.SkipTest(f"registry unreachable: {exc}") from exc
 
@@ -137,6 +138,12 @@ class UpstreamImageLiveTests(unittest.TestCase):
 
     def test_cmd_matches_what_this_image_was_built_for(self):
         self.assertEqual(self.config["Cmd"], ["start"])
+
+    def test_architecture_user_and_stop_signal_match(self):
+        self.assertEqual(self.image["architecture"], "amd64")
+        self.assertEqual(self.image["os"], "linux")
+        self.assertEqual(self.config["User"], "root")
+        self.assertEqual(self.config["StopSignal"], "SIGINT")
 
     def test_working_dir_matches_what_this_image_was_built_for(self):
         self.assertEqual(self.config["WorkingDir"], "/server")

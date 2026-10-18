@@ -66,7 +66,7 @@ class Fixture(unittest.TestCase):
         self.playlists = Playlists(self.root, self.content)
         self.config = Configuration(self.root, {"SERVER_PORT": "49176"})
         self.client = FakeClient()
-        self.live = LiveOperations(self.client, Capabilities())
+        self.live = LiveOperations(self.client, Capabilities("0.9.13"))
         self.out = []
         self.child = MagicMock()
         self.child.poll.return_value = None

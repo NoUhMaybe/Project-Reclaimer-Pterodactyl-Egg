@@ -12,8 +12,9 @@ Enable **RCON** and set an 8-128 character **RCON Password** in Startup, then
 restart. RCON stays on `127.0.0.1` **inside** the container; UDP gameplay and WAN
 allocations are unchanged. Submit each line in the normal console command field.
 Offline playlist listing, editing an existing draft's basic fields, persistent
-settings and content browsing remain available with RCON disabled. Installed
-inventory, full playlist validation/saving and live operations need working RCON.
+settings and content browsing remain available with RCON disabled. Live pickers
+and runtime operations need working RCON. On .20 native content discovery and
+playlist validation/saving can operate without RCON when owned assets are installed.
 
 ```text
 > menu
@@ -71,12 +72,12 @@ alive. Game logs continue normally and never trigger menu repainting.
 | Menu | Operations |
 | --- | --- |
 | Live Game Control | Status, map/mode inventories, change map, mode or both, queue/inspect next game, end round/game |
-| Playlist Manager | List, create, edit, inspect, validate, duplicate/import uploaded files, activate, delete and restore backups |
+| Playlist Manager | List, create/edit, native bulk authoring, staged native validation, copy/import, activate, delete/restore |
 | Voting Manager | Inspect ballot/tallies, start playlist/endround/endgame/shuffle/kick votes, pass/cancel |
 | Player Management | Player IDs, teams and available telemetry; inspect, say/tell, kick, timed/permanent ban, bans/unban, mute/unmute, team/shuffle/teamcount, VPN allowances; gated admins/pardon |
-| Maps, Modes & Mods | Running maps/modes, uploaded saved content, mod metadata, persistent enable/disable switches, vote images, upload instructions |
-| Server Configuration | Persistent overrides, reset authority, live name/ping changes, static and unsupported-setting guidance |
-| Diagnostics & Logs | Process, RCON last-request health, image build version, assets/prefix presence, overrides, status/vote, filtered error excerpts, playlist checks |
+| Maps, Modes & Mods | Running maps/modes, native installed-content search, uploaded content/mod metadata, persistent enable/disable, vote images |
+| Server Configuration | Pending overrides, reset authority, explicit Apply/reload, camera/voice/welcome, live name/ping |
+| Diagnostics & Logs | Detected executable and image pin, exact client matching, capabilities, process/RCON/assets/prefix, status/vote/errors |
 | Help | Navigation, upstream help, version gates, persistence/rollback |
 
 ## Create and activate a rotation
@@ -89,8 +90,9 @@ alive. Game logs continue normally and never trigger menu repainting.
 3. Optional entry properties accept a JSON object, or `-` to keep the existing
    properties. Ordinary rotation creation needs no JSON editing. For example:
    `{"world":{"sprint":"stamina"},"preview_image":"arena.jpg"}`.
-   Advanced game-specific rules should originate in the upstream client editor;
-   the 0.9.13 CLI has no complete option-schema validator.
+   Advanced game-specific rules should originate in the upstream client editor.
+   On .20 the native CLI validates the private unsaved candidate; .13 retains
+   conservative local validation because its CLI lacks playlist commands.
    A `null` value removes an optional property from the draft, for example
    `{"preview_image":null}`; no `null` placeholder is written into the entry.
 4. Add at least three distinct games. Edit/remove entries, change voting time,
@@ -98,8 +100,9 @@ alive. Game logs continue normally and never trigger menu repainting.
    exact ballot inclusion probability: upstream excludes repeats and the last game.
 5. Choose Validate, then Save and answer `yes`. A failed validation writes nothing.
 6. Return with `back`, choose Activate, select the file and confirm. Activation is
-   saved for the **next container start**. Restart through Panel when appropriate;
-   this menu never automatically restarts an active match.
+   saved as a pending override. Use Configuration 7 to validate/generate TOML
+   and request reload, or restart. Switching from a single map/variant to a
+   playlist can require an idle restart. This menu never forces a match restart.
 
 Example editor output (abbreviated):
 
@@ -109,10 +112,10 @@ Community | voting 25s | 3 games
   2 | Valhalla | Capture the Flag | weight 2 | 33.3% weight share
   3 | The Pit  | Slayer           | weight 1 | 16.7% weight share
 > 7
-Local structural/inventory validation passed. ...
+Native playlist show validated the staged candidate. ...
 Confirm: save community.playlist.json ... type yes ...
 > yes
-Playlist saved atomically. On 0.9.13, restart to apply edits to a running rotation.
+Playlist saved atomically. Active .20 rotations update from the next vote after reload.
 ```
 
 Files live in `/home/container/server/playlists/`. Import means upload a JSON file
@@ -127,9 +130,17 @@ known sprint limits, Forge editing exclusion, saved-file references, and image
 signature/size/count. Explicit Workshop references are limited to 23 distinct
 maps and 16 packages. It cannot fully verify embedded saved-map dependencies,
 mod map-ID collisions, aliases for identical games or every engine-specific
-rule/option key. The running engine remains authoritative. On 0.9.15+ the menu
-also calls the local `dedicated playlist show` validator before activating an
-existing file. No such command is called on 0.9.13.
+rule/option key. The running engine remains authoritative. On .20 the filesystem
+backend invokes `dedicated playlist show --config <private config> <candidate>`
+against installed assets before every save/copy/restore and activation check.
+Failure writes no active file. Actual successful engine validation still needs
+the owned-assets Wings run. No native command is called on .13.
+
+Playlist option 10 uses `dedicated playlist new` for a comma-separated map/mode
+cross-product in private staging; preview/edit its draft and confirm Save before
+it reaches active storage. The Python editor retains incremental editing,
+unknown fields, atomic writes, conflict checks and backups. Native `playlist
+list` exists, but local bounded listing is retained for offline file workflows.
 
 Map and mode pickers use the running server's documented JSON `entries` inventory,
 preferring each entry's `reference`. They do not claim every map/mode pairing is
@@ -160,12 +171,20 @@ installations with no manager state retain their previous configuration flow.
 Guided persistent settings include server/community name, player limits, ping
 limit, anti-cheat, VPN blocking, visibility, voting, team-changing policy,
 voice/team voice, text chat, mod sharing and sharing rate (Mbit/s; zero unlimited).
-They are **deferred restart** changes: the menu saves state; the next startup
-generates TOML. Live `servername`/`maxping` actions affect admission/status until
+New keys include welcome, friendly_fire, independent voice scopes, load_timeout,
+trust_player_games and camera. The menu saves **pending** state; Configuration 7
+or startup generates TOML. Apply validates before atomic replacement, requests
+RCON reload and prints its actual reply. Immediate settings, next-game settings
+and idle-restart settings are distinguished in [CONFIGURATION.md](CONFIGURATION.md#0920-persistent-settings-and-reload).
+A rejection is never called applied; saved files can still be picked up by
+upstream auto-reload independently. Live `servername`/`maxping` actions affect admission/status until
 restart and do not rewrite files. `nextmap` waits for the next lobby. Join/RCON
 passwords, allocation ports, networking and game paths are **static** and belong
-in Startup or the appropriate administrator-controlled file. Newer settings are
-explicitly unavailable on the pinned image; see [CAPABILITIES.md](CAPABILITIES.md).
+in Startup or the appropriate administrator-controlled file.
+Camera values are first_person/player_choice/third_person, from the next
+multiplayer game after reload. Campaign co-op/Firefight, vehicles and modes with
+fixed third-person cameras retain their behavior. Mods still require restart.
+See [CAPABILITIES.md](CAPABILITIES.md) for exact gates.
 
 ## Votes, players and transition outcomes
 
@@ -223,7 +242,11 @@ upstream; with 0.9.13 use restart. Signature checks do not fully decode the imag
 Diagnostics reports presence checks for `halo3.dll`, `shared.map` and Wine's
 `system.reg`; these are not full engine/prefix integrity tests. Live map/mode,
 player count and round phase come from RCON. The image build version is labeled
-separately because upstream AUTO_UPDATE can change the runtime executable. Recent
+separately because upstream AUTO_UPDATE can change the runtime executable.
+Diagnostics 7 runs the actual executable's --version, compares its image pin,
+lists capabilities and warns about detected mismatch. .20 clients must match
+the server exactly; individual client versions are not exposed by documented
+RCON. Automatic updates stay disabled by default. Recent
 error excerpts exclude chat/moderation/authentication lines and redact known
 credentials and common identifiers. Full original game output still streams to
 the Console as before. No diagnostic report is automatically uploaded or sent.
@@ -249,8 +272,11 @@ respective storage areas. To roll back settings, use Configuration option 3 or,
 while stopped, restore the desired JSON backup using File Manager. To roll back
 the image, first clear manager overrides and restart once with this image to
 regenerate the managed block from Startup, then select the previous working image.
-Keep `server/`, `.wine-prefix/` and `.cache/reclaimer/` intact. Restore a saved TOML
-while stopped if returning to an earlier image without that regeneration step.
+Keep `server/`, `.wine-prefix/` and `.cache/reclaimer/` intact. Prefer restoring
+pre-upgrade TOML and overrides while stopped; the older wrapper rejects new
+.20 keys in override JSON. Also restore any .20-only administrator TOML fields
+and use .13 clients for the rollback image. Exact original SHA/image digest are
+recorded in [UPSTREAM-0.9.20.md](UPSTREAM-0.9.20.md#preserved-rollback).
 
 See [CAPABILITIES.md](CAPABILITIES.md) for version evidence and
 [WINGS-VALIDATION.md](WINGS-VALIDATION.md) for the required live regression run.

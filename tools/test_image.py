@@ -15,6 +15,12 @@ REPOSITORY = "NoUhMaybe/Project-Reclaimer-Pterodactyl-Egg"
 PACKAGE = "nouhmaybe/project-reclaimer-pterodactyl"
 IMAGE = "ghcr.io/" + PACKAGE
 BRANCH = "refs/heads/feature/console-manager"
+UPGRADE_BRANCH = "refs/heads/feature/console-manager-upstream-0.9.20"
+# Explicit, reviewed source/version/tag combinations. No arbitrary build inputs.
+TARGETS = {
+    BRANCH: ("0.9.13", "console-manager-pr5-"),
+    UPGRADE_BRANCH: ("0.9.20", "console-manager-pr5-reclaimer-0.9.20-"),
+}
 REQUIRED_JOBS = {"validate-json", "python-tests (ubuntu-latest)", "python-tests (windows-latest)",
                  "shell-syntax", "shellcheck", "docker-build", "docker-runtime-tests"}
 ACCEPT = ", ".join(("application/vnd.oci.image.index.v1+json", "application/vnd.oci.image.manifest.v1+json",
@@ -41,20 +47,43 @@ def api(path):
 
 def validate_inputs(repository, event, ref, workflow_sha, source_sha, tag, latest, upstream):
     require(repository == REPOSITORY, "Test publishing is restricted to the intended repository.")
-    require(event == "workflow_dispatch" and ref == BRANCH, "Manually dispatch the trusted feature/console-manager branch.")
+    require(event == "workflow_dispatch" and ref in TARGETS, "Manually dispatch an allowlisted Console Manager branch.")
     require(re.fullmatch(r"[0-9a-f]{40}", source_sha or ""), "Supply a full lowercase 40-character source SHA.")
     require(workflow_sha == source_sha, "Dispatch ref and explicit source SHA must resolve to the same commit.")
-    require(re.fullmatch(r"console-manager-pr5-test\.[1-9][0-9]*", tag or ""), "Only console-manager-pr5-test.N tags are allowed.")
+    version, prefix = TARGETS[ref]
+    require(re.fullmatch(re.escape(prefix) + r"test\.[1-9][0-9]*", tag or ""), "Test tag must match the reviewed branch namespace.")
     require(latest == "false", "Test publishing never permits latest tagging.")
-    require(upstream == "0.9.13", "Test images must retain the reviewed 0.9.13 upstream pin.")
-    return "console-manager-pr5-sha-" + source_sha
+    require(upstream == version, "Upstream pin must match the reviewed branch.")
+    return prefix + "sha-" + source_sha
 
 
-def validate_pr(pr, sha):
-    require(pr["state"] == "open" and not pr.get("merged"), "PR #5 must remain open and unmerged.")
-    require(pr["head"]["repo"]["full_name"] == REPOSITORY and pr["head"]["ref"] == "feature/console-manager",
+def validate_pr(pr, sha, ref=BRANCH):
+    require(ref in TARGETS, "Unexpected source branch.")
+    require(pr["state"] == "open" and not pr.get("merged"), "Source PR must remain open and unmerged.")
+    require(pr["head"]["repo"]["full_name"] == REPOSITORY and pr["head"]["ref"] == ref.removeprefix("refs/heads/"),
             "Forks and arbitrary pull-request branches cannot publish with this workflow.")
-    require(pr["head"]["sha"] == sha, "Source must be PR #5's current head, not an outdated commit.")
+    require(pr["head"]["sha"] == sha, "Source must be the trusted PR's current head, not an outdated commit.")
+    if ref == UPGRADE_BRANCH:
+        require(pr["base"]["repo"]["full_name"] == REPOSITORY and pr["base"]["ref"] == "feature/console-manager",
+                "Upgrade PR must target the preserved Console Manager branch.")
+
+
+def current_source(sha, ref):
+    if ref == BRANCH:
+        pr = api("pulls/5")
+    else:
+        query = urllib.parse.urlencode({"state": "open", "head": "NoUhMaybe:" + ref.removeprefix("refs/heads/"),
+                                        "base": "feature/console-manager"})
+        matches = api("pulls?" + query)
+        require(len(matches) == 1, "Expected exactly one open upgrade PR against feature/console-manager.")
+        pr = api("pulls/" + str(matches[0]["number"]))
+    validate_pr(pr, sha, ref)
+
+
+def environment_inputs():
+    return validate_inputs(os.environ["GITHUB_REPOSITORY"], os.environ["GITHUB_EVENT_NAME"], os.environ["GITHUB_REF"],
+                           os.environ["GITHUB_SHA"], os.environ["SOURCE_SHA"], os.environ["TEST_TAG"],
+                           os.environ["TAG_LATEST"], os.environ["UPSTREAM_VERSION"])
 
 
 def validate_jobs(jobs):
@@ -72,9 +101,8 @@ def outputs(values):
 
 def guard():
     sha, tag = os.environ["SOURCE_SHA"], os.environ["TEST_TAG"]
-    sha_tag = validate_inputs(os.environ["GITHUB_REPOSITORY"], os.environ["GITHUB_EVENT_NAME"], os.environ["GITHUB_REF"],
-                              os.environ["GITHUB_SHA"], sha, tag, os.environ["TAG_LATEST"], os.environ["UPSTREAM_VERSION"])
-    validate_pr(api("pulls/5"), sha)
+    sha_tag = environment_inputs()
+    current_source(sha, os.environ["GITHUB_REF"])
     query = urllib.parse.urlencode({"head_sha": sha, "event": "pull_request", "per_page": 100})
     runs = api("actions/workflows/validate.yml/runs?" + query)["workflow_runs"]
     candidates = [run for run in runs if run["head_sha"] == sha]
@@ -83,7 +111,7 @@ def guard():
     run = candidates[0]
     jobs = api(f"actions/runs/{run['id']}/jobs?per_page=100")["jobs"]
     validate_jobs(jobs)
-    values = {"sha": sha, "test_tag": tag, "sha_tag": sha_tag, "ci_run": run["html_url"]}
+    values = {"sha": sha, "test_tag": tag, "sha_tag": sha_tag, "ci_run": run["html_url"], "upstream": os.environ["UPSTREAM_VERSION"]}
     outputs(values)
     print(json.dumps(values, indent=2))
 
@@ -117,28 +145,28 @@ class Registry:
 
 
 def reserve(path):
-    sha_tag = "console-manager-pr5-sha-" + os.environ["SOURCE_SHA"]
+    sha_tag = environment_inputs()
     tag = os.environ["TEST_TAG"]
-    require(re.fullmatch(r"console-manager-pr5-test\.[1-9][0-9]*", tag), "Invalid test tag.")
-    require(re.fullmatch(r"console-manager-pr5-sha-[0-9a-f]{40}", sha_tag), "Invalid SHA tag.")
     # Publication can follow a long build. Refuse an outdated branch head.
-    validate_pr(api("pulls/5"), os.environ["SOURCE_SHA"])
+    current_source(os.environ["SOURCE_SHA"], os.environ["GITHUB_REF"])
     registry = Registry()
     require(registry.manifest(tag) is None and registry.manifest(sha_tag) is None, "A proposed tag already exists; never overwrite it.")
     baseline = {"image": IMAGE, "source_sha": os.environ["SOURCE_SHA"], "test_tag": tag, "sha_tag": sha_tag,
+                "upstream": os.environ["UPSTREAM_VERSION"],
                 "existing_tags": {existing: registry.manifest(existing)[0] for existing in registry.tags()}}
     Path(path).write_text(json.dumps(baseline, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(baseline, indent=2))
 
 
-def metadata(config, sha):
+def metadata(config, sha, upstream="0.9.13"):
     require(config["os"] == "linux" and config["architecture"] == "amd64", "Expected linux/amd64 image.")
     runtime = config["config"]
     require(runtime["Labels"]["org.opencontainers.image.revision"] == sha, "Published image source revision does not match.")
     require(runtime["Labels"]["org.opencontainers.image.source"] == "https://github.com/" + REPOSITORY, "Unexpected image source.")
     require(runtime["Entrypoint"] == ["/usr/bin/tini", "--", "/pterodactyl/entrypoint.sh"], "tini startup changed.")
     require(runtime["Cmd"] == ["start"], "Upstream startup command changed.")
-    require("RECLAIMER_IMAGE_VERSION=0.9.13" in runtime["Env"], "Upstream version changed.")
+    require(upstream in {value[0] for value in TARGETS.values()}, "Unexpected upstream pin.")
+    require("RECLAIMER_IMAGE_VERSION=" + upstream in runtime["Env"], "Upstream version changed.")
 
 
 def verify(path):
@@ -155,12 +183,12 @@ def verify(path):
     digest = manifest["config"]["digest"]
     raw, _ = registry.get("blobs/" + digest)
     require("sha256:" + hashlib.sha256(raw).hexdigest() == digest, "Registry config digest mismatch.")
-    metadata(json.loads(raw), baseline["source_sha"])
+    metadata(json.loads(raw), baseline["source_sha"], baseline["upstream"])
     for tag, old_digest in baseline["existing_tags"].items():
         current = registry.manifest(tag)
         require(current and current[0] == old_digest, "Existing tag changed during publication: " + tag)
     report = {"image": IMAGE + ":" + baseline["test_tag"], "sha_tag": IMAGE + ":" + baseline["sha_tag"],
-              "source_sha": baseline["source_sha"], "digest": test[0], "platform": "linux/amd64",
+              "source_sha": baseline["source_sha"], "upstream": baseline["upstream"], "digest": test[0], "platform": "linux/amd64",
               "anonymous_manifest_and_config": True, "existing_tags_unchanged": baseline["existing_tags"]}
     Path("publication.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     outputs({"digest": test[0]})
@@ -172,10 +200,10 @@ def verify(path):
 
 def inspect_local():
     data = json.loads(subprocess.check_output(["docker", "image", "inspect", os.environ["LOCAL_IMAGE"]], text=True))[0]
-    metadata({"os": data["Os"], "architecture": data["Architecture"], "config": data["Config"]}, os.environ["SOURCE_SHA"])
+    metadata({"os": data["Os"], "architecture": data["Architecture"], "config": data["Config"]}, os.environ["SOURCE_SHA"], os.environ["UPSTREAM_VERSION"])
     if os.environ.get("EXPECTED_DIGEST"):
         require(IMAGE + "@" + os.environ["EXPECTED_DIGEST"] in data["RepoDigests"], "Anonymous pull returned an unexpected digest.")
-    print("Local image metadata verified: linux/amd64, source revision, upstream 0.9.13 and tini entrypoint.")
+    print("Local image metadata verified: linux/amd64, source revision, upstream " + os.environ["UPSTREAM_VERSION"] + " and tini entrypoint.")
 
 
 if __name__ == "__main__":

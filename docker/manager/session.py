@@ -13,13 +13,14 @@ class Cancelled(Exception):
 
 
 class Session(PlaylistWorkflow, PlayerWorkflow, AdministrationWorkflow):
-    def __init__(self, live, playlists, content, configuration, child, emit=print):
+    def __init__(self, live, playlists, content, configuration, child, emit=print, native=None):
         self.live = live
         self.playlists = playlists
         self.content = content
         self.configuration = configuration
         self.child = child
         self.emit = emit
+        self.native = native
         self.active = False
         self.section = "main"
         self.flow = None
@@ -212,17 +213,23 @@ class Session(PlaylistWorkflow, PlayerWorkflow, AdministrationWorkflow):
                 self.reply(self.live.status() if choice == 2 else self.live.run(["vote" if choice == 3 else "help"]))
             elif choice == 4:
                 self.emit(self.live.client.redact(recent_errors(self.content.server)))
-            else:
+            elif choice == 5:
                 yield from self.playlist_action(6)
+            elif choice == 7:
+                self.emit(self.version_report())
         elif section == "help":
             if choice == 2:
                 self.reply(self.live.run(["help"]))
             elif choice == 3:
-                self.emit(f"Upstream image build {self.live.capabilities.version}; no automatic upgrade. CLI playlist tools: 0.9.15+; admins/pardon: 0.9.16+; reload: 0.9.18+. Unknown versions fail closed. Live engine tests require Wings and game assets.")
+                self.emit(self.version_report())
             elif choice == 4:
-                self.emit(".manager/overrides.json wins over Startup defaults inside the managed server block at next start. Config option 3 restores Startup/manual defaults. Playlist backups live in playlists/.backups; restore using Playlist 9. Never restore credentials through console input.")
+                self.emit(".manager/overrides.json wins over Startup defaults in the managed server block. Save pending settings, then use Config 7 to prepare TOML and request a confirmed reload, or restart. Config 3 resets overrides. Restore playlists using Playlist 9. Roll back new settings/TOML before returning to 0.9.13.")
             else:
                 self.emit("menu/manager enters. exit returns to raw RCON. back/0 navigates; cancel abandons a prompt. refresh re-queries; rcon <command> escapes. stop and Panel Stop shut down. No TTY required. Drafts are lost on exit/disconnect/restart. RCON accepted is not transition completed; refresh status and inspect logs.")
+
+    def version_report(self):
+        from .diagnostics import versions
+        return versions(self.native, self.live.capabilities, self.configuration.env)
 
 
 

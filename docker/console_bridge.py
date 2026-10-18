@@ -21,6 +21,7 @@ from manager.content import Content
 from manager.playlists import Playlists
 from manager.rcon_client import RconClient
 from manager.session import Session
+from manager.native import NativeTools
 
 
 def parse_command(line):
@@ -49,13 +50,14 @@ def main():
     stopping = False
     server_dir = Path(os.environ.get("RECLAIMER_SERVER_DIR", "/home/container/server"))
     client = RconClient(server_dir, enabled)
-    capabilities = Capabilities(os.environ.get("RECLAIMER_IMAGE_VERSION", "0.9.13"))
+    capabilities = Capabilities(os.environ.get("RECLAIMER_IMAGE_VERSION", "0.9.20"))
     live = LiveOperations(client, capabilities)
     content = Content(server_dir)
     configuration = Configuration(server_dir)
+    native = NativeTools(server_dir)
     def emit(message):
         print(client.redact(str(message)), flush=True)
-    session = Session(live, Playlists(server_dir, content), content, configuration, child, emit)
+    session = Session(live, Playlists(server_dir, content, native if capabilities.supports("playlist_cli") else None), content, configuration, child, emit, native=native)
     commands = queue.Queue(maxsize=32)
 
     def input_worker():
@@ -110,6 +112,7 @@ def main():
     try:
         return supervise(child, selector, commands, stop_child, lambda: stopping, emit)
     finally:
+        native.close()
         client.close()
         selector.close()
 

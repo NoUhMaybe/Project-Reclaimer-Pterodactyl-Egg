@@ -1,6 +1,6 @@
 """Optional REAL upstream CLI against a local fake WebSocket service.
 
-Set RECLAIMER_TEST_BINARY to an official 0.9.13 dedicated executable.
+Set RECLAIMER_TEST_BINARY and RECLAIMER_TEST_VERSION to an official executable.
 No game assets or running game server; never auto-download executables.
 """
 import base64
@@ -77,7 +77,7 @@ class UpstreamCliTests(unittest.TestCase):
                             auth = frame(stream)
                             if auth.get("type") != "auth":
                                 raise ValueError("Expected authentication")
-                            send(stream, {"type": "auth", "ok": True, "protocol": 1, "server": "Test", "version": "0.9.13"})
+                            send(stream, {"type": "auth", "ok": True, "protocol": 1, "server": "Test", "version": os.environ.get("RECLAIMER_TEST_VERSION", "0.9.20")})
                             request = frame(stream)
                             messages.append(request)
                             send(stream, {"type": "reply", "id": request.get("id"), "ok": True, "text": "Accepted", "data": {"accepted": True}})
@@ -95,3 +95,54 @@ class UpstreamCliTests(unittest.TestCase):
                 received = [request["command"], *request["args"]] if "args" in request else shlex.split(request["command"])
                 self.assertEqual(received, tokens)
                 self.assertEqual(json.loads(result.stdout), {"accepted": True})
+
+    def test_real_executable_version_and_native_command_availability(self):
+        binary = os.environ["RECLAIMER_TEST_BINARY"]
+        version = os.environ.get("RECLAIMER_TEST_VERSION", "0.9.20")
+        result = subprocess.run([binary, "--version"], capture_output=True, text=True, timeout=15)
+        self.assertEqual(result.returncode, 0)
+        self.assertIn(version, result.stdout)
+        if version != "0.9.20":
+            return
+        for args in (["dedicated", "playlist", "new", "--help"], ["dedicated", "playlist", "show", "--help"],
+                     ["dedicated", "playlist", "list", "--help"],
+                     ["dedicated", "content", "--help"], ["dedicated", "reload", "--help"]):
+            result = subprocess.run([binary, *args], capture_output=True, text=True, timeout=15)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("--config", result.stdout)
+
+    @unittest.skipUnless(os.environ.get("RECLAIMER_TEST_VERSION", "0.9.20") == "0.9.20", "0.9.20 native validation regression")
+    def test_real_native_validator_fails_closed_without_assets_and_checks_camera_enum(self):
+        from manager.native import NativeTools
+        from test_manager import rotation
+        with tempfile.TemporaryDirectory() as work:
+            root = Path(work)
+            (root / "playlists").mkdir()
+            active = root / "playlists/active.json"
+            active.write_text(json.dumps(rotation()), encoding="utf-8")
+            original = active.read_bytes()
+            native = NativeTools(root, executable=os.environ["RECLAIMER_TEST_BINARY"])
+            with self.assertRaises(ValueError):
+                native.validate_playlist(rotation())
+            self.assertEqual(active.read_bytes(), original)
+            config = root / "dedicated.toml"
+            config.write_text('[[server]]\nname="Probe"\nport=49176\ncamera="invalid"\n', encoding="utf-8")
+            result = subprocess.run([os.environ["RECLAIMER_TEST_BINARY"], "dedicated", "content"], cwd=work, capture_output=True, text=True, timeout=15)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("first_person", result.stderr)
+            self.assertIn("player_choice", result.stderr)
+            self.assertIn("third_person", result.stderr)
+
+    @unittest.skipUnless(os.environ.get("RECLAIMER_TEST_VERSION", "0.9.20") == "0.9.20", "0.9.20 configuration schema")
+    def test_real_new_configuration_fields_parse_before_missing_assets_error(self):
+        from configure import render_server_block
+        with tempfile.TemporaryDirectory() as work:
+            settings = {"camera": "player_choice", "friendly_fire": False, "welcome": "Welcome",
+                        "voice_global": True, "voice_team": True, "voice_proximity": False,
+                        "load_timeout": 45, "trust_player_games": False}
+            config = render_server_block({"SERVER_NAME": "Probe", "SERVER_PORT": "49176"}, {"version": 1, "settings": settings})
+            Path(work, 'dedicated.toml').write_text(config, encoding='utf-8')
+            result = subprocess.run([os.environ["RECLAIMER_TEST_BINARY"], "dedicated", "content"], cwd=work, capture_output=True, text=True, timeout=15)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertNotIn('TOML parse error', result.stderr)
+            self.assertIn('halo3.dll', result.stderr)

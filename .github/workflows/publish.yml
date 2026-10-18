@@ -19,11 +19,11 @@ on:
         required: false
         default: false
       source_sha:
-        description: "Test images only: full current PR #5 head SHA (must match the selected workflow branch)"
+        description: "Test images only: full current trusted Console Manager PR head SHA (must match the workflow branch)"
         required: false
         type: string
       test_tag:
-        description: "Test images only: an unused console-manager-pr5-test.N tag; leave empty for existing release publishing"
+        description: "Test only: unused console-manager-pr5-test.N or console-manager-pr5-reclaimer-0.9.20-test.N tag matching the reviewed branch"
         required: false
         type: string
 
@@ -123,6 +123,7 @@ jobs:
       sha: ${{ steps.guard.outputs.sha }}
       test_tag: ${{ steps.guard.outputs.test_tag }}
       sha_tag: ${{ steps.guard.outputs.sha_tag }}
+      upstream: ${{ steps.guard.outputs.upstream }}
     env:
       SOURCE_SHA: ${{ inputs.source_sha }}
       TEST_TAG: ${{ inputs.test_tag }}
@@ -150,6 +151,7 @@ jobs:
           find . -path ./.git -prune -o -name '*.sh' -print0 | xargs -0 shellcheck
           python - <<'PY'
           import json
+          import os
           from pathlib import Path
           from tools.build_egg import build
           actual = json.loads(Path('egg-project-reclaimer.json').read_text())
@@ -157,12 +159,12 @@ jobs:
           actual.pop('exported_at', None)
           expected.pop('exported_at', None)
           assert actual == expected
-          assert 'ARG RECLAIMER_VERSION=0.9.13' in Path('Dockerfile').read_text()
+          assert 'ARG RECLAIMER_VERSION=' + os.environ['UPSTREAM_VERSION'] + '\n' in Path('Dockerfile').read_text()
           assert 'COPY docker/manager /pterodactyl/manager' in Path('Dockerfile').read_text()
           PY
       - name: Build linux/amd64 test image without publishing credentials
         run: |
-          docker build --platform linux/amd64 --build-arg RECLAIMER_VERSION=0.9.13 \
+          docker build --platform linux/amd64 --build-arg "RECLAIMER_VERSION=$UPSTREAM_VERSION" \
             --label "org.opencontainers.image.revision=$SOURCE_SHA" \
             --label "org.opencontainers.image.version=$TEST_TAG" \
             -t "$LOCAL_IMAGE" .
@@ -170,7 +172,7 @@ jobs:
       - name: Verify all console modules inside the built image
         run: |
           docker run --rm --entrypoint python3 --workdir /pterodactyl "$LOCAL_IMAGE" -c 'import importlib, pathlib, pkgutil, manager; import console_bridge, configure; modules = [m.name for m in pkgutil.iter_modules(manager.__path__, "manager.")]; assert len(modules) >= 15; [importlib.import_module(m) for m in modules]; assert all(pathlib.Path(p).is_file() for p in ("entrypoint.sh", "console_bridge.py", "configure.py")); print("Verified modules:", modules)'
-      - name: Run container runtime tests A/B/C/E (no Halo assets)
+      - name: Run container runtime tests A/B/C/E/F (no Halo assets)
         env:
           IMAGE: project-reclaimer-pterodactyl:pr5-test
         run: bash tests/test-runtime.sh
@@ -199,6 +201,8 @@ jobs:
       SOURCE_SHA: ${{ needs.test-build.outputs.sha }}
       TEST_TAG: ${{ needs.test-build.outputs.test_tag }}
       SHA_TAG: ${{ needs.test-build.outputs.sha_tag }}
+      UPSTREAM_VERSION: ${{ needs.test-build.outputs.upstream }}
+      TAG_LATEST: ${{ inputs.tag_latest }}
       LOCAL_IMAGE: project-reclaimer-pterodactyl:pr5-test
     steps:
       - uses: actions/checkout@v4
@@ -250,6 +254,7 @@ jobs:
       TEST_TAG: ${{ needs.test-build.outputs.test_tag }}
       LOCAL_IMAGE: ghcr.io/nouhmaybe/project-reclaimer-pterodactyl:${{ needs.test-build.outputs.test_tag }}
       EXPECTED_DIGEST: ${{ needs.test-publish.outputs.digest }}
+      UPSTREAM_VERSION: ${{ needs.test-build.outputs.upstream }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -263,3 +268,7 @@ jobs:
           python tools/test_image.py inspect
           docker run --rm --entrypoint python3 --workdir /pterodactyl "$LOCAL_IMAGE" -c 'import importlib, pathlib, pkgutil, manager; import console_bridge, configure; modules = [m.name for m in pkgutil.iter_modules(manager.__path__, "manager.")]; assert len(modules) >= 15; [importlib.import_module(m) for m in modules]; assert all(pathlib.Path(p).is_file() for p in ("entrypoint.sh", "console_bridge.py", "configure.py")); print("Anonymous pull: linux/amd64; console-manager modules verified:", modules)'
           printf 'Anonymous Docker pull and module imports passed for `%s`.\n' "$LOCAL_IMAGE" >> "$GITHUB_STEP_SUMMARY"
+      - name: Independently verify the pulled bundled executable and its actual version
+        env:
+          IMAGE: ${{ env.LOCAL_IMAGE }}
+        run: bash tests/test-runtime-f-upstream-cli.sh
