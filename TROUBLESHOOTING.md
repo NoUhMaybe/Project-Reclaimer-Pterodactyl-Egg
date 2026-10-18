@@ -57,8 +57,8 @@ checksum/version and CLI under Wine without assets. None substitute for Wings.
 
 ## Verified upstream image metadata
 
-Fetched directly from the published image on 2026-10-11 using the plain
-registry HTTP API (anonymous token + manifest + config blob; no `docker
+Originally fetched for .13 on 2026-10-11 and rechecked for .20 on 2026-10-18
+using the plain registry HTTP API (anonymous token + manifest + config blob; no `docker
 pull` or local Docker daemon needed — see `tests/test_dockerfile.py` for a
 repeatable version of this check, run automatically against the live
 registry in CI):

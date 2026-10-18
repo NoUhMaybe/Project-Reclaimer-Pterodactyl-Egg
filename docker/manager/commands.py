@@ -82,7 +82,7 @@ class LiveOperations:
                     return rotation_reply
                 rotation = payload(rotation_reply.data)
                 if isinstance(rotation, dict) and "rotation" in rotation and not rotation["rotation"]:
-                    return Reply(False, "Playlist voting requires an active rotation loaded by the running server; restart after saving activation.")
+                    return Reply(False, "Playlist voting requires an active rotation loaded by the running server; apply/reload or restart after saving activation, then inspect nextmap.")
             if kind in ("endround", "shuffle") and state.get("phase") not in (None, "playing"):
                 return Reply(False, "This vote requires an active round.")
             if kind == "shuffle" and state.get("team_game") is False:
