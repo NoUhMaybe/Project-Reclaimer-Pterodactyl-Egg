@@ -18,6 +18,8 @@ docker run --rm -i --user 2002:2002 --entrypoint bash \
     -v "$WORKDIR/home-container:/home/container" "$IMAGE" -s <<'SCRIPT'
 set -euo pipefail
 test "$RECLAIMER_IMAGE_VERSION" = 0.9.20
+# Match entrypoint.sh's existing non-root ownership fix when bypassing it here.
+export WINEPREFIX=/home/container/.wine-prefix
 # The image bundles a distinct build from the downloadable Windows release asset.
 # Verified directly from the official .20 manifest's executable layer.
 printf '%s  %s\n' 15c2b745e2c7dd1563a69f9fa09ba399ac3702eb3da200afa8d42d9a271f03d7 /opt/reclaimer/project-reclaimer.exe | sha256sum --check
