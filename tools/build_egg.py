@@ -159,7 +159,7 @@ def build() -> dict:
         ),
         "features": [],
         "docker_images": {
-        "ghcr.io/nouhmaybe/project-reclaimer-pterodactyl:v0.1.0-dev.5": "ghcr.io/nouhmaybe/project-reclaimer-pterodactyl:v0.1.0-dev.5"
+        "ghcr.io/nouhmaybe/project-reclaimer-pterodactyl:v0.1.0": "ghcr.io/nouhmaybe/project-reclaimer-pterodactyl:v0.1.0"
         },
         "file_denylist": [],
         "startup": "reclaimer-entrypoint start",
