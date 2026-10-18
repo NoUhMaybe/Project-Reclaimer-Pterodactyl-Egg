@@ -9,9 +9,10 @@ community-developed Halo 3 dedicated multiplayer server — under
 > Image `v0.1.0-dev.3` was verified on an Ubuntu Wings node: game assets
 > validated, Guardian Slayer match played to completion and automatically
 > repeated, local player joined, Pterodactyl Console RCON commands succeeded,
-> and clean Stop/Start worked. The `v0.1.0-dev.4` egg is being prepared for
-> wider testing. Fresh-install, external WAN, public listing, and multiplayer
-> with more than one client still need verification.
+> and clean Stop/Start worked. The current installation is also reported by
+> its operator to support WAN connections and multiple players. This branch's
+> new console manager requires a separate live regression run; public listing
+> and independent fresh-install coverage remain separate checks.
 
 ## What this is
 
@@ -255,6 +256,23 @@ and unverified items that remain before this can be called production-ready.
 
 ## Interactive administration from Pterodactyl
 
+Build this branch's wrapper image to include the console manager, then type
+`menu` (also `manager` or `console help`) in the existing **Console** tab.
+Navigate eight numbered categories for live games, playlists, voting, players,
+content/mods, configuration, diagnostics and help. `exit` returns to raw RCON
+without ending the match. No TTY, additional web server or Panel change is used.
+
+Playlists can be created, edited, validated, copied, activated and restored from
+backups entirely through console input. Persistent operations use a separate
+filesystem backend; live actions use local RCON. Explicit manager overrides win
+over Startup defaults at the next start and can be reset through the menu.
+The upstream image stays pinned to **0.9.13**; persistent changes require restart.
+
+See [CONSOLE-MANAGER.md](CONSOLE-MANAGER.md) for workflows/security/rollback,
+[CAPABILITIES.md](CAPABILITIES.md) for version gates and testing limits,
+[ARCHITECTURE.md](ARCHITECTURE.md) for process/backend boundaries, and
+[WINGS-VALIDATION.md](WINGS-VALIDATION.md) for the required live acceptance run.
+
 With `RCON_ENABLED=true` and a strong `RCON_PASSWORD`, the existing web
 Console tab accepts `help`, `maps`, `modes`, `players`,
 `load Valhalla Slayer`, `nextmap Guardian Slayer`, and other documented
@@ -267,8 +285,11 @@ for game clients. See [CONFIGURATION.md](CONFIGURATION.md#rcon-and-the-interacti
 - **Verified:** non-root startup, persistent Wine prefix, game assets,
   complete Guardian Slayer match and automatic next game, LAN client,
   live RCON commands, graceful Stop and Start on `v0.1.0-dev.3`.
-- **Not yet verified:** multiple simultaneous players, remote WAN clients,
-  public browser listing, and clean independent first install from the
-  published egg.
+- **Operator-reported current regression baseline:** multiple simultaneous
+  players and WAN connectivity also work. Preserve these with the manager.
+- **This branch:** automated menu/backend tests and an official 0.9.13 CLI test
+  against a loopback mock service; actual manager gameplay remains unverified
+  until the Wings checklist is completed. No new image has been published.
+- **Other remaining checks:** public browser listing and independent fresh install.
 - **Assets:** never included or redistributed. Copy licensed Halo 3 files
   into `server/game/halo3/` in the Pterodactyl File Manager.

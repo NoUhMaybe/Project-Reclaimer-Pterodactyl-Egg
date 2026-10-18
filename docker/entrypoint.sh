@@ -107,11 +107,9 @@ else
     export RECLAIMER_DEDICATED_HIDDEN=true
 fi
 
-# RCON is off unless explicitly enabled with a password. Wings uses bridge
-# networking (never network_mode: host), so the console must listen on
-# every interface to be reachable through the published allocation. This
-# does not, by itself, make RCON safe to expose publicly — see
-# CONFIGURATION.md "RCON" for the host-firewall caveat.
+# RCON is off unless explicitly enabled with a password. The existing
+# Pterodactyl console bridge reaches it on container loopback; public
+# gameplay uses UDP and does not require exposing the RCON TCP listener.
 if { [ "${RCON_ENABLED:-0}" = "1" ] || [ "${RCON_ENABLED:-0}" = "true" ]; } && [ -n "${RCON_PASSWORD:-}" ]; then
     export RECLAIMER_DEDICATED_RCON_PASSWORD="${RCON_PASSWORD}"
     export RECLAIMER_DEDICATED_RCON_ADDRESS=127.0.0.1

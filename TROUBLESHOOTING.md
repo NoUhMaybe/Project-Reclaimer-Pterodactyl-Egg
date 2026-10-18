@@ -18,6 +18,37 @@
 
 # Troubleshooting
 
+## Console manager (this branch)
+
+The operator reports the existing server working with WAN, multiple players,
+interactive RCON and graceful shutdown. Older test notes below are historical;
+they do not supersede that baseline or establish this branch's live behavior.
+Complete [WINGS-VALIDATION.md](WINGS-VALIDATION.md) before accepting the manager.
+
+| Symptom | Action |
+| --- | --- |
+| `menu` is treated as an unknown RCON command | The running wrapper image predates the manager. Build/test this branch under a separate tag after deployment approval; editing the egg alone does not update an image. |
+| RCON-disabled message | Set Enable RCON and an 8-128 character password in Startup; restart. Persistent menus remain available, but inventory-based validation needs RCON. |
+| Authentication failure or timeout | Check startup, loopback RCON and synchronized configuration. Commands are not automatically retried because their outcome may be unknown. No password should be pasted into Console. |
+| Save rejects a map/mode after upload | 0.9.13 inventories describe content loaded at startup. Restart after uploads, use the listed exact reference and refresh. Engine-specific compatibility still needs verification. |
+| Active rotation still shows the old playlist | Activation is saved for next start. Restart when appropriate; saving overrides does not change the loaded rotation. Inspect `nextmap`, not just the file. |
+| Startup PLAYLIST/settings seem ignored | Explicit manager overrides win. Configuration option 1 shows them; option 3 resets all manager settings/playlist authority for next start. |
+| File changed since opened | An SFTP/File Manager edit intervened. Reopen the playlist before saving; the manager refuses to overwrite that edit. |
+| Invalid path or symlinked storage | Use simple filenames inside playlists and real persistent storage directories. The manager refuses traversal and symlinks; no arbitrary file access is available. |
+| Command accepted but map did not change | Refresh status, inspect next-game override and game logs. Acceptance differs from observed completion/failure. Events may be missed and are not replayed. |
+| `startvote playlist` fails | The running server needs a valid loaded rotation and eligible lobby/player state. A pending activation is insufficient. Read the upstream prerequisite error. |
+| Admins/pardon/reload unavailable | They need 0.9.16/0.9.18 respectively. Keep the current 0.9.13 working pin unless a separate compatibility upgrade is approved. |
+| Mod disabled on disk but still running | Mod switches require restart. Validate affected playlists before restarting; the switch describes next-start state. |
+| Need to restore a playlist | Playlist option 9 validates/restores a selected `playlists/.backups` file, backing up an existing target first. |
+| Need to restore settings or image | Follow [rollback](CONSOLE-MANAGER.md#diagnostics-security-and-rollback); reset overrides and regenerate managed TOML before returning to an earlier image. |
+| Prompt changed while another admin was viewing | The container has one shared stdin session. Coordinate console use; `exit` discards the shared unfinished draft. |
+
+Automated checks are `python -m unittest discover -s tests -v`. POSIX supervisor
+checks are Linux-only, pure Python logic runs on Windows, and the optional
+`RECLAIMER_TEST_BINARY` test exercises the real official CLI against a local fake
+WebSocket server without Halo assets. CI also runs shell syntax, ShellCheck,
+Docker build and runtime A/B/C/E. None substitute for the live Wings checklist.
+
 ## Verified upstream image metadata
 
 Fetched directly from the published image on 2026-10-11 using the plain
@@ -303,7 +334,7 @@ admins should never need to change this field at all.
 | Server browser never lists the server | `SERVER_PUBLIC` is `false` (hidden), the UDP port is not actually reachable from the internet (check the node's upstream firewall/security group, not just Wings), or `public_address` detection failed outbound | Confirm `SERVER_PUBLIC=true`; from another network run the client's server-status check against `<public IP>:<port>`; check container logs for "Hole punching ready" or an ipify detection failure |
 | LAN connectivity works but WAN fails | Port not open at the Wings node's own host firewall / cloud security group (Wings publishing the Docker port is necessary but not sufficient — the host's own firewall still applies) | Open the UDP+TCP port at the OS firewall level on the Wings node itself, not just in Docker |
 | Process exits immediately on every start, repeated restarts | Likely one of the Wine-prefix/symlink failures above; also check `dedicated.toml` for a syntax error if you hand-edited content outside the managed block | Check the full container log from the very first lines; validate your manual TOML edits upstream with `dedicated check` if you have access to a Windows/Linux copy of the binary outside Docker |
-| RCON connection refused | `RCON_ENABLED=false` or `RCON_PASSWORD` blank (disables it by design); or connecting to `127.0.0.1` from outside the node | Set both variables; connect to the node's public IP/allocation port, or use an SSH tunnel as described in CONFIGURATION.md |
+| RCON connection refused | `RCON_ENABLED=false`, password blank, server still starting, or attempting access from outside container loopback | Enable RCON in Startup and restart; use the existing Pterodactyl Console bridge inside the container. Public TCP access is not required. |
 | Changes to `dedicated.toml` lost after restart | You edited inside the `# >>> PTERODACTYL MANAGED SERVER BLOCK >>> ... <<<` markers | That block is intentionally regenerated every start from egg variables; edit anything outside it instead, or use the corresponding egg variable |
 | Broken/corrupted `dedicated.toml` after a manual edit | A stray marker comment, or unbalanced quotes in a hand-edited section | `configure.py` only ever replaces text between exact marker lines; if you deleted one marker but not the other, delete both manually and restart — a fresh managed block will be appended |
 | Server stays "Starting" for 10–60+ seconds on its very first boot only | Expected: the Wine prefix is being initialized fresh for this server (see CONFIGURATION.md "First boot and the Wine prefix") | Wait; subsequent restarts should be much faster. If it never progresses past this, check the log for a Wine/Xvfb error from `reclaimer-entrypoint prepare-prefix` |

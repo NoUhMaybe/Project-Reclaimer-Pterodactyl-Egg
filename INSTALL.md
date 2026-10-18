@@ -116,6 +116,19 @@ assigned.
 
 ## 7. Interactive web-console commands
 
+The manager is included when building the wrapper from this branch; existing
+published tags keep their original behavior until a separately approved image
+publication/deployment. In the Console command field submit `menu`, then select
+a number. `exit` returns to ordinary RCON and keeps the game running. `stop`
+and Panel Stop retain graceful shutdown. No extra port or Panel modification is
+needed. Follow [CONSOLE-MANAGER.md](CONSOLE-MANAGER.md) to create a rotation and
+[WINGS-VALIDATION.md](WINGS-VALIDATION.md) before accepting the new image.
+
+The manager's playlist activation is authoritative over Startup defaults and
+applies at the next restart. Configuration option 3 resets that authority. The
+underlying image remains 0.9.13; do not invoke later `dedicated playlist new`,
+`dedicated content`, admin/pardon or reload commands on this image.
+
 To administer the live server from the Pterodactyl Console tab, set
 **Enable RCON** to `true` and set a strong **RCON Password** (8–128 characters)
 under Startup, then restart the server. RCON binds to `127.0.0.1` **inside
@@ -136,6 +149,8 @@ Only administrators with console access should have command privileges.
 On one Ubuntu Wings node, the image has started under a non-root UID, loaded
 Halo 3 assets, hosted a complete Guardian Slayer match including next-round
 rotation, and accepted interactive RCON commands. Stop and restart were
-also verified with the `dev.3` console bridge. **Not yet verified:** external
-WAN connectivity, a fresh import/install on a separate server, multiple
-simultaneous players, and public server-browser discovery.
+also verified with the `dev.3` console bridge. The operator subsequently reports
+WAN connectivity and multiple simultaneous players working on the current
+installation. This manager branch still needs its own live regression run.
+A fresh import/install on a separate server and public browser discovery remain
+separate checks.
