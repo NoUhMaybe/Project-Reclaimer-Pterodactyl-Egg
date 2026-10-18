@@ -10,7 +10,7 @@
     "description": "Community-developed Halo 3 dedicated multiplayer server (Project Reclaimer), run via a thin Pterodactyl-compatibility wrapper around the official ghcr.io/projectreclaimer/project-reclaimer-dedicated image. Requires your own legally-owned Halo 3 (MCC) game files; none are included. See https://projectreclaimer.dev/host for upstream documentation and https://github.com/NoUhMaybe/Project-Reclaimer-Pterodactyl-Egg for this egg.",
     "features": [],
     "docker_images": {
-        "ghcr.io/nouhmaybe/project-reclaimer-pterodactyl:v0.1.0-dev.5": "ghcr.io/nouhmaybe/project-reclaimer-pterodactyl:v0.1.0-dev.5"
+        "ghcr.io/nouhmaybe/project-reclaimer-pterodactyl:v0.1.0": "ghcr.io/nouhmaybe/project-reclaimer-pterodactyl:v0.1.0"
     },
     "file_denylist": [],
     "startup": "reclaimer-entrypoint start",
