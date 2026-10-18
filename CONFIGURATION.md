@@ -2,6 +2,16 @@
 
 ## How configuration flows
 
+An explicit console-manager override takes precedence for the managed server.
+`server/.manager/overrides.json` stores selected playlist/settings; `configure.py`
+validates it and writes those values into its managed `[[server]]` block on the
+next container start, or when Configuration option 7 explicitly validates and
+generates TOML before requesting RCON reload on .18+. Upstream per-server settings win over environment-supplied
+defaults. Without manager state the existing Startup flow below is unchanged.
+Configuration menu option 3 resets manager authority, with backup, for the next
+start or explicit Apply. The server's actual reload reply determines timing;
+saving JSON alone never proves live application. See [persistent configuration authority](CONSOLE-MANAGER.md#persistent-configuration-and-authority).
+
 Most Project Reclaimer settings are controlled through its own documented
 `RECLAIMER_DEDICATED_*` environment variables, which **override**
 `dedicated.toml` at startup (upstream's own documented mechanism — see
@@ -115,6 +125,14 @@ directly for `[[server]].port`; there is no separate egg variable for it.
 
 ## RCON and the interactive Pterodactyl console
 
+- Submit `menu` (or `manager` / `console help`) to use numbered controls in the
+  existing Console tab. Menu `exit` returns to raw RCON without stopping the game.
+  `stop`/`quit`/Panel Stop retain graceful shutdown; raw `exit` outside the manager
+  retains its previous shutdown-alias behavior. `rcon <command>` escapes from menus.
+- Live RCON operations and persistent filesystem changes have independent
+  backends. The latter save validated files and report restart requirements;
+  editing a file does not imply the current game changed. See
+  [CONSOLE-MANAGER.md](CONSOLE-MANAGER.md) and [CAPABILITIES.md](CAPABILITIES.md).
 - Disabled by default. Set `RCON_ENABLED=true` and supply an 8–128 character
   `RCON_PASSWORD` in the server Startup variables to enable the console bridge.
 - The current implementation binds RCON to **127.0.0.1 inside the container**
@@ -137,7 +155,8 @@ directly for `[[server]].port`; there is no separate egg variable for it.
   depend on player count and game state.
 - Wings `v0.1.0-dev.3` live testing confirmed `maps`, `modes`,
   `players`, queueing `load`, graceful Stop and successful Start.
-  These do not yet establish multi-client public network compatibility.
+  The operator also reports WAN and multiple-client gameplay on the current
+  installation. This branch needs a separate manager regression run.
 
 ## First boot and the Wine prefix
 
@@ -155,6 +174,17 @@ server's storage is wiped (e.g. a full reinstall).
 
 ## Playlists, maps, and mods
 
+- The console Playlist Manager creates version-2 rotations without hand-writing
+  JSON, validates inventory references, backs up edits and atomically saves files.
+  Activate stores a pending override; explicit Apply/reload or startup generates
+  TOML. It does not restart a match or get silently
+  replaced by Startup PLAYLIST. Existing manual files and Startup selection still
+  work when no explicit manager override is present.
+- Vote images live in `server/content/Images/`. The content menu inspects uploaded
+  files/mod metadata and changes `content/disabled-mods.json` with confirmation and
+  backup. Restart after mod enable/disable/replacement and after playlist edits on
+  0.9.13. On .20 active playlist edits may auto-reload from the next vote; the
+  existing ballot/game is retained. No Steam or SteamCMD support is added.
 - Upload playlist files to `server/playlists/` in the file manager and reference
   them by path in the **Playlist** variable.
 - Upload shared content (saved maps, game types, mods) to `server/content/Maps`,
@@ -171,9 +201,40 @@ server's storage is wiped (e.g. a full reinstall).
 - To move to a newer/older upstream release of the **image itself**,
   rebuild with a different `RECLAIMER_VERSION` build arg (see INSTALL.md)
   and change the egg's Docker Image field (and publish a new immutable versioned image tag).
-- Your `dedicated.toml`, playlists, bans, and uploaded assets are never
-  touched by an image update — only `/home/container` is persistent, and
-  neither install nor the entrypoint ever deletes existing files there.
+- Persistent files are retained across image updates. The existing managed TOML
+  block and RCON fields are regenerated from current authority; unmanaged TOML,
+  playlists, bans and uploaded assets are preserved. The upstream entrypoint
+  refreshes its writable executable when the image's bundled hash changes.
+
+## 0.9.20 persistent settings and reload
+
+The version-1 overrides schema and version-2 playlist format are unchanged.
+New guided keys are `friendly_fire`, `welcome` (empty clears), `voice_global`,
+`voice_team`, `voice_proximity`, `load_timeout`, `trust_player_games` and `camera`.
+Camera choices: `first_person`, `player_choice`, `third_person`; next multiplayer
+game after reload. Campaign co-op/Firefight, vehicle views and modes with fixed
+third-person cameras retain their own behavior.
+
+Apply validates a private candidate using the actual native CLI against installed
+assets before atomic TOML replacement, with backup and intervening-edit detection.
+It then independently requests RCON `reload`. A rejected/unavailable reply is
+reported as unconfirmed, not applied. Generated files remain saved; upstream's
+own auto-reload may act separately. On .18+, upstream `auto_reload` defaults true;
+the wrapper preserves administrator policy. Startup environment values are
+captured at process launch, so changes there still require container restart.
+
+| After confirmed reload | Settings |
+| --- | --- |
+| Immediate | host_name, password, max/min players, max_ping, load_timeout, welcome, admins, votes, voice/text, sharing/trust; name if data folder unchanged |
+| Next game / next vote | friendly_fire, team_changing, camera / active playlist edits (current ballot/game retained) |
+| Idle restart or container restart | ports/RCON, visibility, chat_log, VPN/anti-cheat, data-folder rename, content type/customization; campaign/ODST game settings can also idle-restart |
+| Explicit container restart | mod replacement/enable/disable, Startup environment changes |
+
+Password/port/path changes remain in Startup/admin files, not console prompts.
+Clients must match .20 exactly. Automatic updates remain false by default.
+Back up TOML/overrides before testing; restore both before returning to the .13
+image, because its wrapper rejects new override keys. See
+[the recorded rollback image and digest](UPSTREAM-0.9.20.md#preserved-rollback).
 
 ## Backups and restoration
 

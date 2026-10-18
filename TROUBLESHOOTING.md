@@ -18,16 +18,53 @@
 
 # Troubleshooting
 
+## Console manager (this branch)
+
+The operator reports the existing server working with WAN, multiple players,
+interactive RCON and graceful shutdown. Older test notes below are historical;
+they do not supersede that baseline or establish this branch's live behavior.
+Complete [WINGS-VALIDATION.md](WINGS-VALIDATION.md) before accepting the manager.
+
+| Symptom | Action |
+| --- | --- |
+| `menu` is treated as an unknown RCON command | The running wrapper image predates the manager. Build/test this branch under a separate tag after deployment approval; editing the egg alone does not update an image. |
+| RCON-disabled message | Set Enable RCON and an 8-128 character password in Startup; restart. Persistent/native file validation can work with assets, but live inventories/Apply need RCON. |
+| Authentication failure or timeout | Check startup, loopback RCON and synchronized configuration. Commands are not automatically retried because their outcome may be unknown. No password should be pasted into Console. |
+| Save rejects a map/mode after upload | 0.9.13 inventories describe content loaded at startup. Restart after uploads, use the listed exact reference and refresh. Engine-specific compatibility still needs verification. |
+| Active rotation still shows the old playlist | Activation is pending. Use Configuration 7 to generate/validate TOML and request reload, or restart. Content-type changes can idle-restart; inspect `nextmap` and server reply. |
+| Startup PLAYLIST/settings seem ignored | Explicit manager overrides win. Configuration option 1 shows them; option 3 resets all manager settings/playlist authority for next start. |
+| File changed since opened | An SFTP/File Manager edit intervened. Reopen the playlist before saving; the manager refuses to overwrite that edit. |
+| Invalid path or symlinked storage | Use simple filenames inside playlists and real persistent storage directories. The manager refuses traversal and symlinks; no arbitrary file access is available. |
+| Command accepted but map did not change | Refresh status, inspect next-game override and game logs. Acceptance differs from observed completion/failure. Events may be missed and are not replayed. |
+| `startvote playlist` fails | The running server needs a valid loaded rotation and eligible lobby/player state. A pending activation is insufficient. Read the upstream prerequisite error. |
+| Admins/pardon/reload unavailable | They need .16/.18 respectively. This upgrade pins .20; Diagnostics 7 checks actual binary, pin and gates. The original .13 image intentionally gates them. |
+| Native validator rejects a candidate | Check owned game assets, installed content and upstream configuration. Candidate errors are sanitized because TOML can contain secrets. No failed candidate overwrites active files. |
+| Saved setting has no live effect | Edits remain pending until Apply/reload or startup. Read the actual reload reply: immediate, next game/vote or idle restart. Mods need restart. A failed reload is unconfirmed even though files remain saved. |
+| .20 client cannot join / binary differs from pin | Exact versions must match. Check Diagnostics 7 and client version manually. Individual client versions are not exposed by RCON. Keep AUTO_UPDATE off for pinned testing. |
+| Camera seems unchanged | After reload, test the next on-foot multiplayer game. Vehicles, modes with fixed third-person cameras, campaign co-op and Firefight retain their own behavior. |
+| Rollback image rejects overrides | Restore pre-upgrade overrides AND TOML, then use .13 clients. New .20 keys are not accepted by the older wrapper. See UPSTREAM-0.9.20.md. |
+| Mod disabled on disk but still running | Mod switches require restart. Validate affected playlists before restarting; the switch describes next-start state. |
+| Need to restore a playlist | Playlist option 9 validates/restores a selected `playlists/.backups` file, backing up an existing target first. |
+| Need to restore settings or image | Follow [rollback](CONSOLE-MANAGER.md#diagnostics-security-and-rollback); reset overrides and regenerate managed TOML before returning to an earlier image. |
+| Prompt changed while another admin was viewing | The container has one shared stdin session. Coordinate console use; `exit` discards the shared unfinished draft. |
+
+Automated checks are `python -m unittest discover -s tests -v`. POSIX supervisor
+checks are Linux-only, pure Python logic runs on Windows, and the optional
+`RECLAIMER_TEST_BINARY` test exercises the real official CLI against a local fake
+WebSocket server without Halo assets. CI also runs shell syntax, ShellCheck,
+Docker build and runtime A/B/C/E/F. F verifies the actual bundled .20 binary
+checksum/version and CLI under Wine without assets. None substitute for Wings.
+
 ## Verified upstream image metadata
 
-Fetched directly from the published image on 2026-10-11 using the plain
-registry HTTP API (anonymous token + manifest + config blob; no `docker
+Originally fetched for .13 on 2026-10-11 and rechecked for .20 on 2026-10-18
+using the plain registry HTTP API (anonymous token + manifest + config blob; no `docker
 pull` or local Docker daemon needed — see `tests/test_dockerfile.py` for a
 repeatable version of this check, run automatically against the live
 registry in CI):
 
 ```
-image:       ghcr.io/projectreclaimer/project-reclaimer-dedicated:0.9.13
+image:       ghcr.io/projectreclaimer/project-reclaimer-dedicated:0.9.20
 User:        root
 WorkingDir:  /server
 Entrypoint:  ["/usr/bin/tini", "--", "reclaimer-entrypoint"]
@@ -260,14 +297,13 @@ Be precise about this before relying on the egg in production.
    line, and add it to the egg's Startup Configuration in the Panel
    (Process Management → Startup Configuration).
 
-4. **The default pinned upstream version (`RECLAIMER_VERSION=0.9.13` in the
+4. **The default pinned upstream version (`RECLAIMER_VERSION=0.9.20` in the
    Dockerfile) has been confirmed to exist** via a live registry query (see
-   "Verified upstream image metadata" above) — but whether it remains the
-   newest/recommended release by the time you read this has not been
-   re-checked. Run `tests/test_dockerfile.py` (or `docker pull
-   ghcr.io/projectreclaimer/project-reclaimer-dedicated:0.9.13`) before
-   building, and update the Dockerfile's default `ARG` if a newer stable
-   release exists.
+   "Verified upstream image metadata" above). It was the official latest release
+   on October 18, 2026. Run `tests/test_dockerfile.py` (or pull that exact tag)
+   before building; review any future version change separately. The .13/.20
+   entrypoint scripts were byte-identical; full assessment and rollback identity
+   are in [UPSTREAM-0.9.20.md](UPSTREAM-0.9.20.md).
 
 5. **End-to-end gameplay has not been tested**: no client connected, no
    match was played, server-browser visibility from another network was
@@ -303,7 +339,7 @@ admins should never need to change this field at all.
 | Server browser never lists the server | `SERVER_PUBLIC` is `false` (hidden), the UDP port is not actually reachable from the internet (check the node's upstream firewall/security group, not just Wings), or `public_address` detection failed outbound | Confirm `SERVER_PUBLIC=true`; from another network run the client's server-status check against `<public IP>:<port>`; check container logs for "Hole punching ready" or an ipify detection failure |
 | LAN connectivity works but WAN fails | Port not open at the Wings node's own host firewall / cloud security group (Wings publishing the Docker port is necessary but not sufficient — the host's own firewall still applies) | Open the UDP+TCP port at the OS firewall level on the Wings node itself, not just in Docker |
 | Process exits immediately on every start, repeated restarts | Likely one of the Wine-prefix/symlink failures above; also check `dedicated.toml` for a syntax error if you hand-edited content outside the managed block | Check the full container log from the very first lines; validate your manual TOML edits upstream with `dedicated check` if you have access to a Windows/Linux copy of the binary outside Docker |
-| RCON connection refused | `RCON_ENABLED=false` or `RCON_PASSWORD` blank (disables it by design); or connecting to `127.0.0.1` from outside the node | Set both variables; connect to the node's public IP/allocation port, or use an SSH tunnel as described in CONFIGURATION.md |
+| RCON connection refused | `RCON_ENABLED=false`, password blank, server still starting, or attempting access from outside container loopback | Enable RCON in Startup and restart; use the existing Pterodactyl Console bridge inside the container. Public TCP access is not required. |
 | Changes to `dedicated.toml` lost after restart | You edited inside the `# >>> PTERODACTYL MANAGED SERVER BLOCK >>> ... <<<` markers | That block is intentionally regenerated every start from egg variables; edit anything outside it instead, or use the corresponding egg variable |
 | Broken/corrupted `dedicated.toml` after a manual edit | A stray marker comment, or unbalanced quotes in a hand-edited section | `configure.py` only ever replaces text between exact marker lines; if you deleted one marker but not the other, delete both manually and restart — a fresh managed block will be appended |
 | Server stays "Starting" for 10–60+ seconds on its very first boot only | Expected: the Wine prefix is being initialized fresh for this server (see CONFIGURATION.md "First boot and the Wine prefix") | Wait; subsequent restarts should be much faster. If it never progresses past this, check the log for a Wine/Xvfb error from `reclaimer-entrypoint prepare-prefix` |

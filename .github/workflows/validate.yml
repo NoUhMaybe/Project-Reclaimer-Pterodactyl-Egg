@@ -29,14 +29,35 @@ jobs:
           PY
 
   python-tests:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
       - name: Run full unit test suite
-        run: python3 -m unittest discover -s tests -v
+        run: python -m unittest discover -s tests -v
+
+      - name: Verify official 0.9.13 and 0.9.20 CLI contracts (Windows, no game assets)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $checksums = @{
+            '0.9.13' = 'afe11ddc1bd57b451f668e820d4236c1eea44798fff365eecd680d6dc8122a91'
+            '0.9.20' = 'e0d0861b265109cd623e2c991b63c60f08512bca2ae2bc028cb0af996c7bfe3d'
+          }
+          foreach ($version in @('0.9.13', '0.9.20')) {
+            $binary = Join-Path $env:RUNNER_TEMP "project-reclaimer-dedicated-v$version.exe"
+            Invoke-WebRequest "https://github.com/ProjectReclaimer/project-reclaimer-releases/releases/download/v$version/project-reclaimer-dedicated-v$version.exe" -OutFile $binary
+            if ((Get-FileHash -LiteralPath $binary -Algorithm SHA256).Hash.ToLowerInvariant() -ne $checksums[$version]) { throw 'Upstream CLI checksum mismatch' }
+            $env:RECLAIMER_TEST_BINARY = $binary
+            $env:RECLAIMER_TEST_VERSION = $version
+            python -m unittest discover -s tests -p test_upstream_cli.py -v
+            if ($LASTEXITCODE -ne 0) { throw "Upstream $version CLI compatibility tests failed" }
+          }
 
   shell-syntax:
     runs-on: ubuntu-latest
@@ -54,6 +75,7 @@ jobs:
           bash -n tests/test-runtime-c-nonroot-fs.sh
           bash -n tests/test-runtime-d-full-startup.sh
           bash -n tests/test-runtime-e-wine-prefix.sh
+          bash -n tests/test-runtime-f-upstream-cli.sh
 
   shellcheck:
     runs-on: ubuntu-latest
@@ -107,7 +129,7 @@ jobs:
           path: /tmp
       - name: Load image
         run: docker load -i /tmp/project-reclaimer-pterodactyl-ci.tar
-      - name: Run runtime tests A/B/C
+      - name: Run runtime tests A/B/C/E/F
         env:
           IMAGE: project-reclaimer-pterodactyl:ci
         run: |

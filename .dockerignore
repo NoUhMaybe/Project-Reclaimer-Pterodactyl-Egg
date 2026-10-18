@@ -1,0 +1,5 @@
+.git
+.research
+**/__pycache__
+**/*.pyc
+.tmp-test-server

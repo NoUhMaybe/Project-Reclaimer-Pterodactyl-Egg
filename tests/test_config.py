@@ -159,6 +159,30 @@ class MainEndToEndTests(unittest.TestCase):
         content = self._run_main({"SERVER_NAME": 'Quote " Test', "SERVER_PORT": "49176"})
         self.assertIn('name = "Quote \\" Test"', content)
 
+    def test_manager_activation_survives_startup_playlist_and_map_defaults(self):
+        from manager.configuration import Configuration
+        self.server_dir.mkdir(parents=True)
+        (self.server_dir / "playlists").mkdir()
+        (self.server_dir / "playlists" / "community.json").write_text('{"version":2}', encoding="utf-8")
+        manager = Configuration(self.server_dir)
+        manager.activate("community.json")
+        manager.save_setting("max_players", 24)
+        env = {"SERVER_NAME": "Test", "SERVER_PORT": "49176", "PLAYLIST": "playlists/startup.json", "MAP": "Guardian", "GAME_TYPE": "Slayer"}
+        first = self._run_main(env)
+        second = self._run_main(dict(env, PLAYLIST="playlists/another.json"))
+        self.assertEqual(first, second)
+        self.assertIn('playlist = "playlists/community.json"', second)
+        self.assertIn("max_players = 24", second)
+        self.assertNotIn('map = "Guardian"', second)
+        manager.reset()
+        self.assertIn('playlist = "playlists/startup.json"', self._run_main(env))
+
+    def test_control_characters_are_escaped_and_rcon_is_loopback(self):
+        content = self._run_main({"SERVER_NAME": "A\rB", "SERVER_PORT": "49176", "RCON_ENABLED": "1", "RCON_PASSWORD": "pass\\word\"test"})
+        self.assertIn('name = "A\\rB"', content)
+        self.assertIn('address = "127.0.0.1"', content)
+        self.assertIn('password = "pass\\\\word\\"test"', content)
+
 
 if __name__ == "__main__":
     unittest.main()

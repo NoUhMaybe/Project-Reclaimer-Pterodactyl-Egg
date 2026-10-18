@@ -8,7 +8,9 @@ It is a testing release, not yet a stable version. You do **not** need to
 build the image yourself to install the egg once the tag has been published.
 
 Advanced users can build an image with `docker build -t project-reclaimer-pterodactyl:local .`.
-The upstream base image is pinned to version 0.9.13 by default.
+This upgrade branch pins the upstream base image to 0.9.20. Existing egg image
+defaults are unchanged. Use exact version-matched 0.9.20 clients for an approved
+upgrade test; preserve the .13 test image/configuration for rollback.
 See [the publishing workflow](.github/workflows/publish.yml) for tagged releases.
 
 ## 2. Import the egg into Pterodactyl Panel
@@ -108,13 +110,30 @@ output itself to confirm the server is actually up.
 
 ## 6. Connect with a Halo 3 client
 
-Open Project Reclaimer's client, open the **Server Browser**, and look for
+Use a Project Reclaimer client matching the server's exact version (0.9.20 for
+this branch), open the **Server Browser**, and look for
 your server's name (public servers appear automatically within about a
 minute of starting, via the project's public master servers). Alternatively
 use **Direct Connect** with the node's public IP/DNS name and the port you
 assigned.
 
 ## 7. Interactive web-console commands
+
+The manager is included when building the wrapper from this branch; existing
+published tags keep their original behavior until a separately approved image
+publication/deployment. In the Console command field submit `menu`, then select
+a number. `exit` returns to ordinary RCON and keeps the game running. `stop`
+and Panel Stop retain graceful shutdown. No extra port or Panel modification is
+needed. Follow [CONSOLE-MANAGER.md](CONSOLE-MANAGER.md) to create a rotation and
+[WINGS-VALIDATION.md](WINGS-VALIDATION.md) before accepting the new image.
+
+The manager's playlist activation is authoritative over Startup defaults. Use
+Configuration option 7 to validate/generate TOML and request reload, or restart.
+Option 3 resets that authority. New in .20 support: native playlist new/show,
+native content discovery, admin/pardon, welcome/voice scopes, reload and camera
+policy. Native validation requires installed owned game assets; activation from
+a single map to a playlist can require an idle restart. Follow
+[the upgrade checklist and rollback procedure](WINGS-VALIDATION.md).
 
 To administer the live server from the Pterodactyl Console tab, set
 **Enable RCON** to `true` and set a strong **RCON Password** (8–128 characters)
@@ -136,6 +155,8 @@ Only administrators with console access should have command privileges.
 On one Ubuntu Wings node, the image has started under a non-root UID, loaded
 Halo 3 assets, hosted a complete Guardian Slayer match including next-round
 rotation, and accepted interactive RCON commands. Stop and restart were
-also verified with the `dev.3` console bridge. **Not yet verified:** external
-WAN connectivity, a fresh import/install on a separate server, multiple
-simultaneous players, and public server-browser discovery.
+also verified with the `dev.3` console bridge. The operator subsequently reports
+WAN connectivity and multiple simultaneous players working on the current
+installation. This manager branch still needs its own live regression run.
+A fresh import/install on a separate server and public browser discovery remain
+separate checks.

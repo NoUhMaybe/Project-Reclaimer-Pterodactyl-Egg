@@ -4,11 +4,24 @@
 The server remains supervised as a child. Signals and exit codes propagate.
 """
 import os
+from pathlib import Path
+import queue
 import selectors
 import shlex
 import signal
 import subprocess
 import sys
+import threading
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from manager.capabilities import Capabilities
+from manager.commands import LiveOperations
+from manager.configuration import Configuration
+from manager.content import Content
+from manager.playlists import Playlists
+from manager.rcon_client import RconClient
+from manager.session import Session
+from manager.native import NativeTools
 
 
 def parse_command(line):
@@ -17,6 +30,8 @@ def parse_command(line):
         return None
     if line.lower() in ("help", "consolehelp"):
         return "help"
+    if line.lower() in ("menu", "manager", "console help"):
+        return "menu"
     if line == "\x03" or line.lower() in ("stop", "quit", "exit"):
         return "stop"
     try:
@@ -33,6 +48,42 @@ def main():
     enabled = os.environ.get("RCON_ENABLED", "0").lower() in ("1", "true") and bool(os.environ.get("RCON_PASSWORD"))
     child = subprocess.Popen(sys.argv[1:], stdin=subprocess.DEVNULL, start_new_session=True)
     stopping = False
+    server_dir = Path(os.environ.get("RECLAIMER_SERVER_DIR", "/home/container/server"))
+    client = RconClient(server_dir, enabled)
+    capabilities = Capabilities(os.environ.get("RECLAIMER_IMAGE_VERSION", "0.9.20"))
+    live = LiveOperations(client, capabilities)
+    content = Content(server_dir)
+    configuration = Configuration(server_dir)
+    native = NativeTools(server_dir)
+    def emit(message):
+        print(client.redact(str(message)), flush=True)
+    session = Session(live, Playlists(server_dir, content, native if capabilities.supports("playlist_cli") else None), content, configuration, child, emit, native=native)
+    commands = queue.Queue(maxsize=32)
+
+    def input_worker():
+        while True:
+            line = commands.get()
+            if stopping or child.poll() is not None:
+                return
+            try:
+                if session.handle(line):
+                    continue
+                command = parse_command(line)
+                if command == "stop":
+                    stop_child()
+                elif command == "help":
+                    emit("[console] Type menu (or manager / console help) for management. Raw commands: status, maps, modes, players, load \"The Pit\" \"Capture the Flag\", nextmap, endround, endgame. stop shuts down.")
+                elif isinstance(command, list):
+                    emit(client.execute(command).text)
+            except ValueError as exc:
+                emit("[console] " + str(exc))
+            except Exception:
+                # A malformed response must not take down the supervisor or
+                # spill credentials through an exception traceback.
+                session.flow = None
+                emit("[console] Operation failed safely. Use menu/refresh; inspect files with File Manager if needed.")
+
+    threading.Thread(target=input_worker, name="console-input", daemon=True).start()
 
     def stop_child(_signum=None, _frame=None):
         nonlocal stopping
@@ -58,8 +109,31 @@ def main():
     if not enabled:
         print("[console] RCON disabled: set Enable RCON=true and a password in Startup.", flush=True)
 
+    try:
+        return supervise(child, selector, commands, stop_child, lambda: stopping, emit)
+    finally:
+        native.close()
+        client.close()
+        selector.close()
+
+
+def supervise(child, selector, commands, stop_child, is_stopping, emit):
+    """Keep the existing process group and escalation schedule independent of UI."""
+    buffer = b""
+    dropping = False
+    def submit(raw):
+        line = raw.decode("utf-8", errors="replace").rstrip("\r")
+        # Stop never waits behind an RCON request or an unfinished prompt.
+        if line.strip().lower() in ("stop", "quit") or line.strip() == "\x03":
+            stop_child()
+            return
+        try:
+            commands.put_nowait(line)
+        except queue.Full:
+            emit("[console] Input queue full; wait for the pending operation. stop remains available.")
+
     while child.poll() is None:
-        if stopping:
+        if is_stopping():
             try:
                 return child.wait(timeout=15)
             except subprocess.TimeoutExpired:
@@ -74,42 +148,26 @@ def main():
                     os.killpg(child.pid, signal.SIGKILL)
                     return child.wait()
         for key, _ in selector.select(timeout=0.2):
-            line = key.fileobj.readline()
-            if not line:
+            chunk = os.read(key.fileobj.fileno(), 4096)
+            if not chunk:
                 selector.unregister(key.fileobj)
+                if buffer:
+                    submit(buffer)
+                    buffer = b""
                 continue
-            try:
-                command = parse_command(line)
-            except ValueError as exc:
-                print(f"[console] {exc}", flush=True)
-                continue
-            if command is None:
-                continue
-            if command == "stop":
-                stop_child()
-                break
-            if command == "help":
-                print("[console] Try: maps, modes, players, load Guardian Slayer, nextmap Valhalla Slayer, endround, endgame, stop.", flush=True)
-                continue
-            if not enabled:
-                print("[console] Enable RCON and set a password, then restart.", flush=True)
-                continue
-            try:
-                result = subprocess.run(
-                    ["dedicated", "rcon", *command],
-                    stdin=subprocess.DEVNULL, capture_output=True,
-                    text=True, timeout=15, check=False,
-                )
-                if result.stdout.strip():
-                    print(result.stdout.rstrip(), flush=True)
-                if result.stderr.strip():
-                    print(result.stderr.rstrip(), flush=True)
-                if result.returncode:
-                    print(f"[console] RCON command failed (exit {result.returncode}).", flush=True)
-            except subprocess.TimeoutExpired:
-                print("[console] RCON timed out; the game may still be starting.", flush=True)
-            except OSError as exc:
-                print(f"[console] RCON client failed: {exc}", flush=True)
+            buffer += chunk
+            while b"\n" in buffer:
+                raw, buffer = buffer.split(b"\n", 1)
+                if dropping:
+                    dropping = False
+                elif len(raw) <= 65536:
+                    submit(raw)
+                else:
+                    emit("[console] Input line exceeds 64 KiB; discarded.")
+            if len(buffer) > 65536:
+                buffer = b""
+                dropping = True
+                emit("[console] Input line exceeds 64 KiB; discarded.")
     return child.wait()
 
 

@@ -9,9 +9,10 @@ community-developed Halo 3 dedicated multiplayer server — under
 > Image `v0.1.0-dev.3` was verified on an Ubuntu Wings node: game assets
 > validated, Guardian Slayer match played to completion and automatically
 > repeated, local player joined, Pterodactyl Console RCON commands succeeded,
-> and clean Stop/Start worked. The `v0.1.0-dev.4` egg is being prepared for
-> wider testing. Fresh-install, external WAN, public listing, and multiplayer
-> with more than one client still need verification.
+> and clean Stop/Start worked. The current installation is also reported by
+> its operator to support WAN connections and multiple players. This branch's
+> new console manager requires a separate live regression run; public listing
+> and independent fresh-install coverage remain separate checks.
 
 ## What this is
 
@@ -64,7 +65,7 @@ reimplement its Wine/supervisor logic — see
 │   ├── test_egg.py                     # unittest: structural/schema validation of the egg JSON
 │   ├── test_config.py                  # unittest: configure.py unit + end-to-end tests
 │   ├── test_dockerfile.py              # unittest: static + live regression tests for the upstream ENTRYPOINT/CMD contract
-│   ├── test-runtime.sh                 # orchestrator: runs A/B/C/E, reports D as manual-only
+│   ├── test-runtime.sh                 # orchestrator: runs A/B/C/E/F, reports D as manual-only
 │   ├── test-runtime-a-missing-assets.sh
 │   ├── test-runtime-b-configuration.sh
 │   ├── test-runtime-c-nonroot-fs.sh
@@ -157,13 +158,13 @@ docker build -t project-reclaimer-pterodactyl:local .
 ```
 
 The `RECLAIMER_VERSION` build arg pins the upstream base image tag (default
-`0.9.13`, confirmed to exist via a live registry query against
+`0.9.20`, confirmed to exist via a live registry query against
 `ghcr.io/projectreclaimer/project-reclaimer-dedicated` — see
 [tests/test_dockerfile.py](tests/test_dockerfile.py), which re-checks this
 automatically in CI):
 
 ```bash
-docker build --build-arg RECLAIMER_VERSION=0.9.13 -t project-reclaimer-pterodactyl:0.9.13 .
+docker build --build-arg RECLAIMER_VERSION=0.9.20 -t project-reclaimer-pterodactyl:0.9.20 .
 ```
 
 Point your own server's egg Docker Image field at whatever you build/push —
@@ -255,6 +256,38 @@ and unverified items that remain before this can be called production-ready.
 
 ## Interactive administration from Pterodactyl
 
+Build this branch's wrapper image to include the console manager, then type
+`menu` (also `manager` or `console help`) in the existing **Console** tab.
+Navigate eight numbered categories for live games, playlists, voting, players,
+content/mods, configuration, diagnostics and help. `exit` returns to raw RCON
+without ending the match. No TTY, additional web server or Panel change is used.
+
+Playlists can be created, edited, validated, copied, activated and restored from
+backups entirely through console input. Persistent operations use a separate
+filesystem backend; live actions use local RCON. Explicit manager overrides win
+over Startup defaults when generated for Apply/startup and can be reset through the menu.
+This isolated upgrade branch pins **0.9.20**. Native playlist creation/validation,
+content discovery, admin/pardon, configuration reload and camera policy extend
+the same manager. Settings stay pending until explicit Apply/reload or startup;
+the server's reply describes immediate/next-game/idle timing. Mods still require
+restart. Clients must match 0.9.20 exactly; automatic updates stay disabled by default.
+See [the compatibility assessment](UPSTREAM-0.9.20.md) and
+[per-version matrix](CAPABILITIES.md). Existing egg image defaults are unchanged.
+
+The approved experimental publication path uses the existing manual workflow on
+`feature/console-manager-upstream-0.9.20`, an exact source SHA, upstream `0.9.20`,
+`tag_latest=false`, and an unused `console-manager-pr5-reclaimer-0.9.20-test.N`
+tag. It requires all seven CI jobs, rejects forks/existing tags, checks every
+previous tag digest and verifies an anonymous pull on a fresh runner. No merge,
+stable release or deployment is part of that path. The original
+`console-manager-pr5-test.1` remains the .13 rollback image; restore pre-upgrade
+TOML/overrides and use .13 clients when rolling back.
+
+See [CONSOLE-MANAGER.md](CONSOLE-MANAGER.md) for workflows/security/rollback,
+[CAPABILITIES.md](CAPABILITIES.md) for version gates and testing limits,
+[ARCHITECTURE.md](ARCHITECTURE.md) for process/backend boundaries, and
+[WINGS-VALIDATION.md](WINGS-VALIDATION.md) for the required live acceptance run.
+
 With `RCON_ENABLED=true` and a strong `RCON_PASSWORD`, the existing web
 Console tab accepts `help`, `maps`, `modes`, `players`,
 `load Valhalla Slayer`, `nextmap Guardian Slayer`, and other documented
@@ -267,8 +300,14 @@ for game clients. See [CONFIGURATION.md](CONFIGURATION.md#rcon-and-the-interacti
 - **Verified:** non-root startup, persistent Wine prefix, game assets,
   complete Guardian Slayer match and automatic next game, LAN client,
   live RCON commands, graceful Stop and Start on `v0.1.0-dev.3`.
-- **Not yet verified:** multiple simultaneous players, remote WAN clients,
-  public browser listing, and clean independent first install from the
-  published egg.
+- **Operator-reported current regression baseline:** multiple simultaneous
+  players and WAN connectivity also work. Preserve these with the manager.
+- **Original manager:** the operator reports startup, navigation, map discovery,
+  status and accepted map commands with `console-manager-pr5-test.1` (.13).
+- **This upgrade:** automated menu/backend tests, actual official .13/.20 CLI
+  contracts, and .20 Wine/container checks. Native successful asset validation,
+  gameplay, reload effects and multiplayer remain unverified until the Wings
+  checklist is completed. Publication evidence is attached to the manual run.
+- **Other remaining checks:** public browser listing and independent fresh install.
 - **Assets:** never included or redistributed. Copy licensed Halo 3 files
   into `server/game/halo3/` in the Pterodactyl File Manager.
