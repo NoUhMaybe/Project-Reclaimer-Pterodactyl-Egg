@@ -95,6 +95,8 @@ class PlaylistWorkflow:
             if choice == 2:
                 index = (yield from self.ask("Game number", self.number(1, len(draft["games"])))) - 1
                 previous = draft["games"][index]
+                if not isinstance(previous, dict):
+                    previous = {}
             maps, modes = self.inventory()
             map_name = yield from self.choose("map", maps)
             mode = yield from self.choose("mode (engine checks compatibility)", modes)
@@ -115,7 +117,11 @@ class PlaylistWorkflow:
                     raise ValueError("Use a JSON object containing only the listed fields.")
                 return obj
             extra = yield from self.ask("Optional fields JSON, or -", options, "-")
-            entry.update(extra)
+            for key, value in extra.items():
+                if value is None:
+                    entry.pop(key, None)
+                else:
+                    entry[key] = value
             if index is None:
                 draft["games"].append(entry)
             else:

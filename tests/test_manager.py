@@ -273,6 +273,24 @@ class RuntimeTests(Fixture):
         with self.assertRaises(ValueError):
             self.content.set_enabled("../../outside", False)
 
+    def test_nested_workshop_and_disabled_playlist_reference(self):
+        self.content.store.write("Mods/Workshop/123/ModInfo.json", {"name": "Canyon"})
+        self.content.set_enabled("Mods/Workshop/123", False)
+        self.assertEqual(self.content.mods()[0]["folder"], "Mods/Workshop/123")
+        data = rotation()
+        data["games"][0]["map"] = "workshop:123/arena"
+        errors = self.playlists.validate(data, MAPS + ["workshop:123/arena"], MODES)
+        self.assertIn("disabled for next startup", "\n".join(errors))
+
+    def test_activation_revalidates_after_confirmation(self):
+        self.playlists.save("community.json", rotation(), MAPS, MODES)
+        self.lines("menu", "2", "4", "1")
+        data = rotation()
+        data["games"][0]["map"] = "missing"
+        self.playlists.store.write("community.json", data)
+        self.lines("yes")
+        self.assertNotIn("playlist", self.config.read())
+
     def test_persistent_settings_and_limits(self):
         self.config.save_setting("max_players", 24)
         self.config.save_setting("min_players", 8)

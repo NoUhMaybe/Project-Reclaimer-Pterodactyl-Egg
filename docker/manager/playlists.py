@@ -66,6 +66,8 @@ class Playlists:
                 if key == "map" and value.lower().startswith("workshop:"):
                     modmaps.add(value.casefold())
                     packages.add(value.split("/", 1)[0].casefold())
+                    if self.content.disabled_reference(value):
+                        errors.append(prefix + "referenced mod is disabled for next startup: " + value)
                 if key == "game" and (value.casefold() in ("forge", "map editor", "editing") or "forge" == value.casefold().split("/")[-1].split(".")[0]):
                     errors.append(prefix + "Forge editing sessions cannot be playlist games.")
             if not integer(entry.get("weight", 1), 1, 100):
@@ -97,6 +99,8 @@ class Playlists:
                 elif base.lower().startswith("workshop:"):
                     modmaps.add(base.casefold())
                     packages.add(base.split("/", 1)[0].casefold())
+                    if self.content.disabled_reference(base):
+                        errors.append(prefix + "base-map mod is disabled for next startup.")
             identity = {k: v for k, v in entry.items() if k not in ("name", "weight", "preview_image")}
             for field in ("rules", "options", "world"):
                 if identity.get(field) == {}:
@@ -143,11 +147,14 @@ class Playlists:
     @staticmethod
     def preview(data):
         games = data.get("games", [])
-        total = sum(g.get("weight", 1) for g in games)
+        total = sum(g.get("weight", 1) for g in games if isinstance(g, dict) and integer(g.get("weight", 1), 1, 100))
         lines = [f"{data.get('name', '')} | voting {data.get('vote_seconds', 20)}s | {len(games)} games"]
         for i, game in enumerate(games, 1):
+            if not isinstance(game, dict):
+                lines.append(f"{i:3} | INVALID entry; edit or remove before saving.")
+                continue
             weight = game.get("weight", 1)
-            share = 100 * weight / total if total else 0
+            share = 100 * weight / total if total and integer(weight, 1, 100) else 0
             lines.append(f"{i:3} | {game.get('map', '?')} | {game.get('game', '?')} | weight {weight} | {share:.1f}% weight share | {game.get('name', '')}")
         lines.append("Weight shares are not ballot inclusion probabilities: draws exclude repeats and the previous game.")
         return "\n".join(lines)
