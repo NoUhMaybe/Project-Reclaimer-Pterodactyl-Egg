@@ -54,7 +54,7 @@ def send(stream, data):
 class UpstreamCliTests(unittest.TestCase):
     def test_quoted_arguments_survive_the_real_cli(self):
         binary = Path(os.environ["RECLAIMER_TEST_BINARY"]).resolve()
-        for tokens in (["load", "The Pit", "Capture the Flag"], ["password", ""], ["say", 'special "quotes" \\ $() ; `']):
+        for tokens in (["load", "The Pit", "Capture the Flag"], ["password", ""], ["say", 'special "quotes" \\ $() ; `'], ["say", "--config"]):
             with self.subTest(tokens=tokens), tempfile.TemporaryDirectory() as work, socket.socket() as listener:
                 listener.bind(("127.0.0.1", 0))
                 listener.listen(1)
@@ -86,7 +86,7 @@ class UpstreamCliTests(unittest.TestCase):
                 thread = threading.Thread(target=serve, daemon=True)
                 thread.start()
                 command_text(tokens)
-                result = subprocess.run([str(binary), "dedicated", "rcon", "--json", *tokens], cwd=work, capture_output=True, text=True, timeout=15)
+                result = subprocess.run([str(binary), "dedicated", "rcon", "--json", "--", *tokens], cwd=work, capture_output=True, text=True, timeout=15)
                 thread.join(timeout=11)
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr + str(errors))
                 self.assertFalse(errors)

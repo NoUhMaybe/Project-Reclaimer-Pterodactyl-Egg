@@ -64,7 +64,9 @@ class RconClient:
         sensitive = tokens[0].lower() == "password" and len(tokens) > 1
         if sensitive and tokens[1]:
             self.secrets.append(tokens[1])
-        args = ["dedicated", "rcon"] + (["--json"] if json_reply else []) + list(tokens)
+        # End CLI option parsing so names/reasons beginning with -- cannot
+        # become upstream --config/--server options.
+        args = ["dedicated", "rcon"] + (["--json"] if json_reply else []) + ["--", *tokens]
         try:
             with self.lock:
                 if self.closed:

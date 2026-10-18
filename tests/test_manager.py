@@ -319,7 +319,7 @@ class TransportTests(unittest.TestCase):
         client = RconClient("server", True, {"RCON_PASSWORD": "sensitive"})
         reply = client.execute(["load", "The Pit", "Capture the Flag"], json_reply=True)
         args = popen.call_args.args[0]
-        self.assertEqual(args, ["dedicated", "rcon", "--json", "load", "The Pit", "Capture the Flag"])
+        self.assertEqual(args, ["dedicated", "rcon", "--json", "--", "load", "The Pit", "Capture the Flag"])
         self.assertNotIn("sensitive", str(args))
         self.assertTrue(reply.ok)
 
