@@ -19,7 +19,7 @@ def validate(root=ROOT):
     root = Path(root)
     version = (root / "VERSION").read_text(encoding="utf-8").strip()
     require(re.fullmatch(r"v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?", version),
-            "VERSION must contain an explicit semantic release tag, e.g. v0.1.1.")
+            "VERSION must contain an explicit semantic release tag, e.g. v0.1.2.")
     text = (root / "Dockerfile").read_text(encoding="utf-8")
     match = re.search(r"^ARG RECLAIMER_VERSION=(\S+)\s*$", text, re.M)
     require(match and match.group(1) == "0.9.20", "Reviewed upstream pin must remain 0.9.20.")

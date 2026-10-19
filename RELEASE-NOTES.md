@@ -1,12 +1,12 @@
-# Project Reclaimer Pterodactyl Egg v0.1.1 — Reclaimer v0.9.20
+# Project Reclaimer Pterodactyl Egg v0.1.2 — Reclaimer v0.9.20
 
-Prepared maintenance notes; this repair has not been published. The previous
-v0.1.1 Git tag and image already exist, so use a new approved patch version for
-the corrected source and update this title before publication. See RELEASING.md.
+Prepared maintenance notes; v0.1.2 has not been published by this repair task.
+The candidate uses a new patch version while preserving the earlier v0.1.1 Git
+tag and image. See RELEASING.md for the approved publication procedure.
 
 | Component | Version |
 | --- | --- |
-| Pterodactyl Egg | v0.1.1 (prepared candidate) |
+| Pterodactyl Egg | v0.1.2 (prepared candidate) |
 | Project Reclaimer Dedicated Server | v0.9.20 |
 | Required Project Reclaimer Client | v0.9.20 |
 | Architecture | linux/amd64 |

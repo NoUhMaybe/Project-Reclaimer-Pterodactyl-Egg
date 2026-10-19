@@ -3,7 +3,9 @@
 This is a runbook, not authorization to publish, move/delete tags, overwrite images
 or deploy. Merge, tag creation, GitHub Release publication and any server test need
 the owner's explicit approval. This maintenance task only prepares and validates
-a PR. Keep the upstream pin at 0.9.20.
+a PR. The current candidate is **egg v0.1.2**, using
+`ghcr.io/nouhmaybe/project-reclaimer-pterodactyl:v0.1.2`.
+Keep the upstream server and required client at **0.9.20**.
 
 ## Existing identifiers: 2026-10-19 audit
 
@@ -21,8 +23,9 @@ that release at the existing v0.1.1 tag would select the old, uncorrected source
 The new publisher intentionally rejects reusing the existing versioned image.
 **Republishing corrected source as v0.1.1 is not safe with the current identifiers.**
 
-Prefer a new unused patch version, such as v0.1.2, after approval. Change VERSION,
-update current-version documentation/notes, regenerate the egg and pass CI again.
+The owner selected **v0.1.2** for the corrected candidate. VERSION, current release
+documentation and the generated egg now target that version; pass CI for the
+updated source and confirm its release identifiers remain unused before publishing.
 Do not force-update, delete or recreate the old tags or replace the existing image.
 Any exceptional history reconciliation requires a separate explicit decision;
 this runbook supplies no automatic destructive reconciliation commands.
@@ -32,9 +35,8 @@ this runbook supplies no automatic destructive reconciliation commands.
 1. Review and approve the maintenance PR after every Validate egg job passes.
    Merge only with approval. Fetch main and record its full corrected SHA; a merge
    commit can differ from the tested PR head. Validate the resulting main commit.
-2. Resolve the occupied version by selecting an approved unused patch version and
-   updating VERSION plus the version table/notes. The prepared maintenance files
-   currently say v0.1.1 as requested; they do not silently select a different version.
+2. Confirm VERSION, the version table/notes and the generated egg all select
+   v0.1.2. Preserve the occupied v0.1.1 identifiers; do not move or reuse them.
 3. Run the following from a clean checkout of the intended final source:
 
    ```bash
@@ -81,9 +83,8 @@ this runbook supplies no automatic destructive reconciliation commands.
    workflow. The publisher also verifies them via anonymous registry requests.
 5. Only after image verification and release approval, create the GitHub Release
    using the already approved tag. Do not let GitHub create a tag from a guessed
-   target branch. Use the corrected title, e.g. Project Reclaimer Pterodactyl Egg
-   v0.1.2 — Reclaimer v0.9.20 when that is the chosen version. Paste RELEASE-NOTES.md
-   as GitHub-flavored Markdown after updating the intended egg version; no HTML.
+   target branch. Use the title Project Reclaimer Pterodactyl Egg v0.1.2 — Reclaimer
+   v0.9.20. Paste RELEASE-NOTES.md as GitHub-flavored Markdown; no HTML.
 
 ## JSON attachment and download verification
 

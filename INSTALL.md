@@ -8,11 +8,11 @@ Source-code archives are not the standalone egg attachment. If an attachment is
 missing, report it or use the JSON from that exact release tag; do not substitute
 a development egg. The older v0.1.0 release currently lacks its promised attachment.
 
-This maintenance branch prepares **egg v0.1.1**, selecting
-`ghcr.io/nouhmaybe/project-reclaimer-pterodactyl:v0.1.1`, with **server and client
-0.9.20**, on **linux/amd64**. Its previous tag/image are already published and
-refer to older source, while its GitHub Release was deleted. Do not treat those
-identifiers as the corrected release. Complete [RELEASING.md](RELEASING.md)
+This maintenance branch prepares **egg v0.1.2**, selecting
+`ghcr.io/nouhmaybe/project-reclaimer-pterodactyl:v0.1.2`, with **server and client
+0.9.20**, on **linux/amd64**. The earlier v0.1.1 tag/image remain published from
+older source, while its GitHub Release was deleted. Preserve those identifiers;
+the corrected candidate uses v0.1.2. Complete [RELEASING.md](RELEASING.md)
 before using a newly released candidate. No local Docker build is required for
 a validated published image.
 

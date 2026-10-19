@@ -10,7 +10,7 @@ community-developed Halo 3 dedicated multiplayer server — under
 
 | Component | Prepared version |
 | --- | --- |
-| Pterodactyl Egg | v0.1.1 |
+| Pterodactyl Egg | v0.1.2 |
 | Project Reclaimer Dedicated Server | v0.9.20 |
 | Required Project Reclaimer Client | v0.9.20 |
 | Docker Architecture | linux/amd64 |
@@ -18,9 +18,9 @@ community-developed Halo 3 dedicated multiplayer server — under
 The egg version and upstream server version are independent. Clients must match
 the dedicated server's exact **0.9.20** version. `VERSION` defines the egg/image
 version; Dockerfile pins upstream separately. This maintenance candidate is not
-a newly published release. The existing v0.1.1 tag/image refer to older source;
-do not overwrite them. [Release reconciliation](RELEASING.md) explains the safe
-new-patch path and attachment procedure.
+a newly published release. It targets v0.1.2 while preserving the existing
+v0.1.1 tag/image, which refer to older source. [Release instructions](RELEASING.md)
+cover final-commit validation, approved publication and the attachment procedure.
 
 > **Status: maintenance candidate; earlier releases have successful live Wings testing.**
 > Image `v0.1.0-dev.3` was verified on an Ubuntu Wings node: game assets
@@ -160,14 +160,14 @@ See [INSTALL.md](INSTALL.md) for the full walkthrough. Summary:
 2. Import [`egg-project-reclaimer.json`](egg-project-reclaimer.json) into a
    Nest in your Panel.
 3. Verify the egg's Docker Image matches its reviewed release. The current
-   candidate selects v0.1.1; resolve the existing-tag collision before releasing it.
+   candidate selects v0.1.2; publish only from the approved, validated release commit.
 4. Create a server, set its variables, upload your own legally-owned Halo 3
    files, and start it.
 
 ### Building and publishing the image
 
 The generated candidate references
-`ghcr.io/nouhmaybe/project-reclaimer-pterodactyl:v0.1.1`, from `VERSION`.
+`ghcr.io/nouhmaybe/project-reclaimer-pterodactyl:v0.1.2`, from `VERSION`.
 Use a validated published release and its attached JSON for installation, rather
 than inferring readiness from the presence of an image tag. Local builds are optional.
 
