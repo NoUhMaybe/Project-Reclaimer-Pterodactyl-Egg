@@ -21,10 +21,11 @@ echo "-----------------------------------------------------------"
 SERVER_DIR="/mnt/server/server"
 
 if [ ! -d /mnt/server ]; then
-    echo "ERROR: $SERVER_DIR does not exist (expected Pterodactyl install mount)." >&2
+    echo "ERROR: /mnt/server does not exist (expected Pterodactyl install mount)." >&2
     exit 1
 fi
 
+mkdir -p "$SERVER_DIR"
 cd "$SERVER_DIR"
 
 echo "Creating persistent directory skeleton..."
