@@ -5,7 +5,24 @@ egg that runs [Project Reclaimer](https://projectreclaimer.dev/) — a
 community-developed Halo 3 dedicated multiplayer server — under
 [Pterodactyl](https://pterodactyl.io/) Panel 1.x / Wings 1.x.
 
-> **Status: development prerelease with successful live Wings testing.**
+[Latest published stable release](https://github.com/NoUhMaybe/Project-Reclaimer-Pterodactyl-Egg/releases/latest)
+· [Installation](INSTALL.md) · [Release checklist](RELEASING.md)
+
+| Component | Prepared version |
+| --- | --- |
+| Pterodactyl Egg | v0.1.1 |
+| Project Reclaimer Dedicated Server | v0.9.20 |
+| Required Project Reclaimer Client | v0.9.20 |
+| Docker Architecture | linux/amd64 |
+
+The egg version and upstream server version are independent. Clients must match
+the dedicated server's exact **0.9.20** version. `VERSION` defines the egg/image
+version; Dockerfile pins upstream separately. This maintenance candidate is not
+a newly published release. The existing v0.1.1 tag/image refer to older source;
+do not overwrite them. [Release reconciliation](RELEASING.md) explains the safe
+new-patch path and attachment procedure.
+
+> **Status: maintenance candidate; earlier releases have successful live Wings testing.**
 > Image `v0.1.0-dev.3` was verified on an Ubuntu Wings node: game assets
 > validated, Guardian Slayer match played to completion and automatically
 > repeated, local player joined, Pterodactyl Console RCON commands succeeded,
@@ -142,16 +159,17 @@ See [INSTALL.md](INSTALL.md) for the full walkthrough. Summary:
 1. Use the published versioned compatibility image or build your own.
 2. Import [`egg-project-reclaimer.json`](egg-project-reclaimer.json) into a
    Nest in your Panel.
-3. Verify the egg's Docker Image is a published tag (currently v0.1.0-dev.4 when released).
+3. Verify the egg's Docker Image matches its reviewed release. The current
+   candidate selects v0.1.1; resolve the existing-tag collision before releasing it.
 4. Create a server, set its variables, upload your own legally-owned Halo 3
    files, and start it.
 
 ### Building and publishing the image
 
-The egg references `ghcr.io/nouhmaybe/project-reclaimer-pterodactyl:v0.1.0-dev.4`
-for the upcoming development prerelease. Previous development images are
-already published to GHCR. For a normal installation, pull the published
-tag; local builds are optional.
+The generated candidate references
+`ghcr.io/nouhmaybe/project-reclaimer-pterodactyl:v0.1.1`, from `VERSION`.
+Use a validated published release and its attached JSON for installation, rather
+than inferring readiness from the presence of an image tag. Local builds are optional.
 
 ```bash
 docker build -t project-reclaimer-pterodactyl:local .
@@ -175,23 +193,20 @@ registry reachable from your Wings node(s) works, including a private one.
 
 [`.github/workflows/publish.yml`](.github/workflows/publish.yml) builds and
 pushes `ghcr.io/nouhmaybe/project-reclaimer-pterodactyl` using the
-repository's own `GITHUB_TOKEN` (no separate PAT/secret needed, scoped to
-`packages: write`). It is **not** triggered by ordinary commits — only by:
+repository's own `GITHUB_TOKEN`, with `contents: read` and `packages: write` only
+in publishing jobs. Ordinary branch commits do not publish. An approved version
+tag push or explicit release dispatch must match `VERSION`, the generated egg,
+the upstream pin and the exact checked-out tag commit. An existing versioned
+image is rejected before build and again before push. Unit, installer, shell and
+container runtime tests must pass before the exact tested image is pushed.
+Only its immutable version tag is published; mutable `latest` changes are separate.
 
-- pushing a version tag matching `v*.*.*` (e.g. `git tag v0.1.0 && git push
-  origin v0.1.0`) — pushes that tag as the image tag, and also `:latest` if
-  the tag has no prerelease suffix (`v0.1.0-beta.1` does not get `:latest`);
-  or
-- running it manually from the Actions tab (`workflow_dispatch`), optionally
-  overriding the upstream `RECLAIMER_VERSION` to pin and choosing whether to
-  also push `:latest`.
-
-The workflow runs the full unit test suite first and only builds/pushes if
-that passes. It builds for `linux/amd64` only (matching the two Wings nodes
-described in this project's deployment target) and attaches standard
-`org.opencontainers.image.*` labels. No image has been pushed as part of
-writing this egg — that remains a deliberate, manually-authorized step for
-the repository owner.
+The publisher records source/version/platform/digest and stores the validated
+JSON as an Actions artifact. The separate release-assets workflow attaches it
+to an already published, version-matched GitHub Release after checking image
+provenance, using job-scoped `contents: write` and no package-write permission.
+It cannot create a release or overwrite an existing attachment. See
+[RELEASING.md](RELEASING.md) for approval gates and manual recovery instructions.
 
 CI (`.github/workflows/validate.yml`) separately builds the image on every
 push/PR to catch Dockerfile errors and runs the automatable runtime tests
@@ -214,7 +229,7 @@ shellcheck docker/*.sh scripts/*.sh tests/*.sh
 # Build the image (requires Docker):
 docker build -t project-reclaimer-pterodactyl:local .
 
-# Runtime integration tests A/B/C (requires Docker; no game assets needed):
+# Runtime integration tests A/B/C/E/F (requires Docker; no game assets needed):
 IMAGE=project-reclaimer-pterodactyl:local tests/test-runtime.sh
 
 # Test D — full startup (requires Docker AND your own legally obtained
@@ -266,13 +281,14 @@ Playlists can be created, edited, validated, copied, activated and restored from
 backups entirely through console input. Persistent operations use a separate
 filesystem backend; live actions use local RCON. Explicit manager overrides win
 over Startup defaults when generated for Apply/startup and can be reset through the menu.
-This isolated upgrade branch pins **0.9.20**. Native playlist creation/validation,
+The current server pin is **0.9.20**. Native playlist creation/validation,
 content discovery, admin/pardon, configuration reload and camera policy extend
 the same manager. Settings stay pending until explicit Apply/reload or startup;
 the server's reply describes immediate/next-game/idle timing. Mods still require
 restart. Clients must match 0.9.20 exactly; automatic updates stay disabled by default.
 See [the compatibility assessment](UPSTREAM-0.9.20.md) and
-[per-version matrix](CAPABILITIES.md). Existing egg image defaults are unchanged.
+[per-version matrix](CAPABILITIES.md). The release egg/image version is defined
+separately in `VERSION`.
 
 The approved experimental publication path uses the existing manual workflow on
 `feature/console-manager-upstream-0.9.20`, an exact source SHA, upstream `0.9.20`,

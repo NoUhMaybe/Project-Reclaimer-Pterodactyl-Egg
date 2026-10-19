@@ -1,0 +1,51 @@
+name: Attach validated egg to a published release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Existing published release tag; upload never creates a release or overwrites an asset"
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  attach:
+    if: github.repository == 'NoUhMaybe/Project-Reclaimer-Pterodactyl-Egg'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Validate the artifact and its published image from this exact commit
+        id: checked
+        run: |
+          python tools/check_release.py --verify-published
+          test "$RELEASE_TAG" = "$(cat VERSION)"
+          test "$(git rev-parse HEAD)" = "$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")"
+          gh release view "$RELEASE_TAG" --json tagName,isDraft,isPrerelease > /tmp/release.json
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          release = json.loads(Path('/tmp/release.json').read_text())
+          assert release['tagName'] == os.environ['RELEASE_TAG']
+          assert not release['isDraft'], 'Publish the reviewed release first; this job never creates or publishes one.'
+          assert release['isPrerelease'] == ('-' in os.environ['RELEASE_TAG'])
+          PY
+      - name: Attach the validated generated JSON without replacing any asset
+        run: gh release upload "$RELEASE_TAG" egg-project-reclaimer.json

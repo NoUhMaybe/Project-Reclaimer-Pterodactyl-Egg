@@ -12,9 +12,13 @@ on:
       reclaimer_version:
         description: "Upstream RECLAIMER_VERSION build arg to pin (ghcr.io/projectreclaimer/project-reclaimer-dedicated tag)"
         required: false
-        default: "0.9.13"
+        default: "0.9.20"
+      release_tag:
+        description: "Release only: existing Git tag matching VERSION and the selected source commit"
+        required: false
+        type: string
       tag_latest:
-        description: "Also push the :latest tag"
+        description: "Must remain false; mutable latest aliases require a separate approved action"
         type: boolean
         required: false
         default: false
@@ -35,82 +39,72 @@ env:
 
 jobs:
   test-then-publish:
-    # Preserve release-tag behavior; manual release publication stays on main.
-    # Feature-branch test publishing has a separate, guarded path below.
-    if: github.event_name == 'push' || (inputs.test_tag == '' && github.ref == 'refs/heads/main')
+    if: github.event_name == 'push' || (inputs.test_tag == '' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')))
+    concurrency:
+      group: ghcr-immutable-release-publish
+      cancel-in-progress: false
     permissions:
       contents: read
       packages: write
     runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ inputs.release_tag }}
+      UPSTREAM_VERSION: ${{ inputs.reclaimer_version }}
+      TAG_LATEST: ${{ inputs.tag_latest || 'false' }}
     steps:
       - uses: actions/checkout@v4
-
+        with:
+          fetch-depth: 0
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
-      # Never push an image built from a repository that doesn't pass its
-      # own test suite first.
-      - name: Run unit tests
-        run: python3 -m unittest discover -s tests -v
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Determine build-arg and tags
-        id: vars
+      - name: Validate exact tag, source, egg, upstream and unused image version
+        id: release
+        run: python tools/check_release.py --publishing
+      - name: Run complete unit and installer regression suite
+        run: python -m unittest discover -s tests -v
+      - name: Check shell syntax and ShellCheck
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "reclaimer_version=${{ github.event.inputs.reclaimer_version }}" >> "$GITHUB_OUTPUT"
-            echo "push_latest=${{ github.event.inputs.tag_latest }}" >> "$GITHUB_OUTPUT"
-          else
-            # Triggered by a vX.Y.Z tag push: keep the Dockerfile's own
-            # default RECLAIMER_VERSION, and only push :latest for stable
-            # (non-prerelease) tags, e.g. not v0.1.0-beta.1.
-            echo "reclaimer_version=" >> "$GITHUB_OUTPUT"
-            case "${{ github.ref_name }}" in
-              *-*) echo "push_latest=false" >> "$GITHUB_OUTPUT" ;;
-              *) echo "push_latest=true" >> "$GITHUB_OUTPUT" ;;
-            esac
-          fi
-
-
-      - name: Extract OCI metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.IMAGE_NAME }}
-          flavor: |
-            latest=false
-          tags: |
-            type=ref,event=tag
-            type=raw,value=latest,enable=${{ steps.vars.outputs.push_latest == 'true' }}
-          labels: |
-            org.opencontainers.image.title=Project Reclaimer (Pterodactyl compatibility image)
-            org.opencontainers.image.description=Pterodactyl-compatible wrapper around the official Project Reclaimer dedicated server image
-            org.opencontainers.image.licenses=MIT
-  
-
-      - name: Build and push
+          find . -path ./.git -prune -o -name '*.sh' -print0 | xargs -0 -n 1 bash -n
+          find . -path ./.git -prune -o -name '*.sh' -print0 | xargs -0 shellcheck
+      - uses: docker/setup-buildx-action@v3
+      - name: Build the release candidate without pushing
         uses: docker/build-push-action@v6
         with:
           context: .
           platforms: linux/amd64
-          push: true
-          build-args: |
-            ${{ steps.vars.outputs.reclaimer_version != '' && format('RECLAIMER_VERSION={0}', steps.vars.outputs.reclaimer_version) || '' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          load: true
+          push: false
+          build-args: RECLAIMER_VERSION=${{ steps.release.outputs.upstream }}
+          tags: project-reclaimer-pterodactyl:release-check
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.release.outputs.version }}
+      - name: Test the actual candidate image before publication
+        env:
+          IMAGE: project-reclaimer-pterodactyl:release-check
+        run: bash tests/test-runtime.sh
+      - name: Recheck identity and refuse any existing immutable tag immediately before push
+        run: python tools/check_release.py --publishing
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Push only the exact tested versioned image
+        env:
+          RELEASE_IMAGE: ${{ steps.release.outputs.image }}
+        run: |
+          docker tag project-reclaimer-pterodactyl:release-check "$RELEASE_IMAGE"
+          docker push "$RELEASE_IMAGE"
+      - name: Verify the published digest, source, version and platform anonymously
+        run: python tools/check_release.py --verify-published
+      - uses: actions/upload-artifact@v4
+        with:
+          name: validated-egg-${{ steps.release.outputs.version }}
+          path: egg-project-reclaimer.json
+          retention-days: 30
 
   test-build:
     if: github.event_name == 'workflow_dispatch' && inputs.test_tag != ''

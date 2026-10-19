@@ -39,8 +39,11 @@ def variable(
     }
 
 
-def build() -> dict:
-    install_script = (ROOT / "scripts" / "install.sh").read_text(encoding="utf-8")
+def build(root=None) -> dict:
+    root = ROOT if root is None else Path(root)
+    install_script = (root / "scripts" / "install.sh").read_text(encoding="utf-8")
+    version = (root / "VERSION").read_text(encoding="utf-8").strip()
+    image = "ghcr.io/nouhmaybe/project-reclaimer-pterodactyl:" + version
 
     variables = [
         variable(
@@ -159,7 +162,7 @@ def build() -> dict:
         ),
         "features": [],
         "docker_images": {
-        "ghcr.io/nouhmaybe/project-reclaimer-pterodactyl:v0.1.0": "ghcr.io/nouhmaybe/project-reclaimer-pterodactyl:v0.1.0"
+            image: image
         },
         "file_denylist": [],
         "startup": "reclaimer-entrypoint start",
@@ -184,6 +187,12 @@ def build() -> dict:
 def main() -> None:
     egg = build()
     out_path = ROOT / "egg-project-reclaimer.json"
+    # Preserve metadata when functional content is unchanged, so regeneration
+    # after validation/commit leaves a clean tree.
+    if out_path.exists():
+        previous = json.loads(out_path.read_text(encoding="utf-8"))
+        if {k: v for k, v in previous.items() if k != "exported_at"} == {k: v for k, v in egg.items() if k != "exported_at"}:
+            egg["exported_at"] = previous.get("exported_at", egg["exported_at"])
     with out_path.open("w", encoding="utf-8", newline="\n") as fh:
         json.dump(egg, fh, indent=4, ensure_ascii=False)
         fh.write("\n")
