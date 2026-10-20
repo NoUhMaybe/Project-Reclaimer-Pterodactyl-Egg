@@ -10,15 +10,15 @@ a development egg. The older v0.1.0 release currently lacks its promised attachm
 
 This maintenance branch prepares **egg v0.1.2**, selecting
 `ghcr.io/nouhmaybe/project-reclaimer-pterodactyl:v0.1.2`, with **server and client
-0.9.20**, on **linux/amd64**. The earlier v0.1.1 tag/image remain published from
+0.9.21**, on **linux/amd64**. The earlier v0.1.1 tag/image remain published from
 older source, while its GitHub Release was deleted. Preserve those identifiers;
 the corrected candidate uses v0.1.2. Complete [RELEASING.md](RELEASING.md)
 before using a newly released candidate. No local Docker build is required for
 a validated published image.
 
 Advanced users can build an image with `docker build -t project-reclaimer-pterodactyl:local .`.
-The upstream base image remains pinned to 0.9.20. Use exact version-matched
-0.9.20 clients, and back up the existing image selection and configuration before
+The upstream base image is pinned to 0.9.21. Use exact version-matched
+0.9.21 clients, and back up the existing image selection and configuration before
 an approved upgrade test.
 See [the publishing workflow](.github/workflows/publish.yml) for tagged releases.
 
@@ -119,7 +119,7 @@ output itself to confirm the server is actually up.
 
 ## 6. Connect with a Halo 3 client
 
-Use a Project Reclaimer client matching the server's exact version (0.9.20 for
+Use a Project Reclaimer client matching the server's exact version (0.9.21 for
 this branch), open the **Server Browser**, and look for
 your server's name (public servers appear automatically within about a
 minute of starting, via the project's public master servers). Alternatively

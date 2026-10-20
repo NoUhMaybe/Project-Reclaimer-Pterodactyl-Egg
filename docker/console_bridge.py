@@ -50,7 +50,7 @@ def main():
     stopping = False
     server_dir = Path(os.environ.get("RECLAIMER_SERVER_DIR", "/home/container/server"))
     client = RconClient(server_dir, enabled)
-    capabilities = Capabilities(os.environ.get("RECLAIMER_IMAGE_VERSION", "0.9.20"))
+    capabilities = Capabilities(os.environ.get("RECLAIMER_IMAGE_VERSION", "0.9.21"))
     live = LiveOperations(client, capabilities)
     content = Content(server_dir)
     configuration = Configuration(server_dir)

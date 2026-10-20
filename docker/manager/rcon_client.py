@@ -11,7 +11,7 @@ from .events import Events
 def command_text(tokens):
     """Validate tokens and format a display/reference command (never shell code).
 
-    The official 0.9.13 and 0.9.20 CLIs send argv as a structured JSON args array.
+    The official 0.9.13, 0.9.20 and 0.9.21 CLIs send argv as a structured JSON args array.
     Transport must pass split tokens, NOT this reconstructed display string.
     """
     if not tokens or not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", tokens[0]):

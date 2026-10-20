@@ -12,7 +12,7 @@ on:
       reclaimer_version:
         description: "Upstream RECLAIMER_VERSION build arg to pin (ghcr.io/projectreclaimer/project-reclaimer-dedicated tag)"
         required: false
-        default: "0.9.20"
+        default: "0.9.21"
       release_tag:
         description: "Release only: existing Git tag matching VERSION and the selected source commit"
         required: false

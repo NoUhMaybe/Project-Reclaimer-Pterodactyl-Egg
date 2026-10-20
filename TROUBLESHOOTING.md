@@ -57,14 +57,15 @@ checksum/version and CLI under Wine without assets. None substitute for Wings.
 
 ## Verified upstream image metadata
 
-Originally fetched for .13 on 2026-10-11 and rechecked for .20 on 2026-10-18
+Originally fetched for .13 on 2026-10-11, rechecked for .20 on 2026-10-18
+and .21 on 2026-10-20
 using the plain registry HTTP API (anonymous token + manifest + config blob; no `docker
 pull` or local Docker daemon needed — see `tests/test_dockerfile.py` for a
 repeatable version of this check, run automatically against the live
 registry in CI):
 
 ```
-image:       ghcr.io/projectreclaimer/project-reclaimer-dedicated:0.9.20
+image:       ghcr.io/projectreclaimer/project-reclaimer-dedicated:0.9.21
 User:        root
 WorkingDir:  /server
 Entrypoint:  ["/usr/bin/tini", "--", "reclaimer-entrypoint"]
@@ -297,13 +298,14 @@ Be precise about this before relying on the egg in production.
    line, and add it to the egg's Startup Configuration in the Panel
    (Process Management → Startup Configuration).
 
-4. **The default pinned upstream version (`RECLAIMER_VERSION=0.9.20` in the
+4. **The default pinned upstream version (`RECLAIMER_VERSION=0.9.21` in the
    Dockerfile) has been confirmed to exist** via a live registry query (see
    "Verified upstream image metadata" above). It was the official latest release
-   on October 18, 2026. Run `tests/test_dockerfile.py` (or pull that exact tag)
-   before building; review any future version change separately. The .13/.20
-   entrypoint scripts were byte-identical; full assessment and rollback identity
-   are in [UPSTREAM-0.9.20.md](UPSTREAM-0.9.20.md).
+   on October 20, 2026. Run `tests/test_dockerfile.py` (or pull that exact tag)
+   before building; review any future version change separately. The .21 image
+   retains every .20 filesystem layer except the executable; the current assessment
+   is in [UPSTREAM-0.9.21.md](UPSTREAM-0.9.21.md), with earlier rollback identities
+   preserved in [UPSTREAM-0.9.20.md](UPSTREAM-0.9.20.md).
 
 5. **End-to-end gameplay has not been tested**: no client connected, no
    match was played, server-browser visibility from another network was

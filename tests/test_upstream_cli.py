@@ -77,7 +77,7 @@ class UpstreamCliTests(unittest.TestCase):
                             auth = frame(stream)
                             if auth.get("type") != "auth":
                                 raise ValueError("Expected authentication")
-                            send(stream, {"type": "auth", "ok": True, "protocol": 1, "server": "Test", "version": os.environ.get("RECLAIMER_TEST_VERSION", "0.9.20")})
+                            send(stream, {"type": "auth", "ok": True, "protocol": 1, "server": "Test", "version": os.environ.get("RECLAIMER_TEST_VERSION", "0.9.21")})
                             request = frame(stream)
                             messages.append(request)
                             send(stream, {"type": "reply", "id": request.get("id"), "ok": True, "text": "Accepted", "data": {"accepted": True}})
@@ -98,11 +98,11 @@ class UpstreamCliTests(unittest.TestCase):
 
     def test_real_executable_version_and_native_command_availability(self):
         binary = os.environ["RECLAIMER_TEST_BINARY"]
-        version = os.environ.get("RECLAIMER_TEST_VERSION", "0.9.20")
+        version = os.environ.get("RECLAIMER_TEST_VERSION", "0.9.21")
         result = subprocess.run([binary, "--version"], capture_output=True, text=True, timeout=15)
         self.assertEqual(result.returncode, 0)
         self.assertIn(version, result.stdout)
-        if version != "0.9.20":
+        if version not in ("0.9.20", "0.9.21"):
             return
         for args in (["dedicated", "playlist", "new", "--help"], ["dedicated", "playlist", "show", "--help"],
                      ["dedicated", "playlist", "list", "--help"],
@@ -111,7 +111,7 @@ class UpstreamCliTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn("--config", result.stdout)
 
-    @unittest.skipUnless(os.environ.get("RECLAIMER_TEST_VERSION", "0.9.20") == "0.9.20", "0.9.20 native validation regression")
+    @unittest.skipUnless(os.environ.get("RECLAIMER_TEST_VERSION", "0.9.21") in ("0.9.20", "0.9.21"), "0.9.20+ native validation regression")
     def test_real_native_validator_fails_closed_without_assets_and_checks_camera_enum(self):
         from manager.native import NativeTools
         from test_manager import rotation
@@ -133,7 +133,7 @@ class UpstreamCliTests(unittest.TestCase):
             self.assertIn("player_choice", result.stderr)
             self.assertIn("third_person", result.stderr)
 
-    @unittest.skipUnless(os.environ.get("RECLAIMER_TEST_VERSION", "0.9.20") == "0.9.20", "0.9.20 configuration schema")
+    @unittest.skipUnless(os.environ.get("RECLAIMER_TEST_VERSION", "0.9.21") in ("0.9.20", "0.9.21"), "0.9.20+ configuration schema")
     def test_real_new_configuration_fields_parse_before_missing_assets_error(self):
         from configure import render_server_block
         with tempfile.TemporaryDirectory() as work:

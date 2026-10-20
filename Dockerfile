@@ -29,7 +29,7 @@
 #     entrypoint only ever needs to `mkdir -p` the symlink *targets* under
 #     /home/container at runtime, which Wings always makes writable.
 
-ARG RECLAIMER_VERSION=0.9.20
+ARG RECLAIMER_VERSION=0.9.21
 FROM ghcr.io/projectreclaimer/project-reclaimer-dedicated:${RECLAIMER_VERSION}
 ARG RECLAIMER_VERSION
 ENV RECLAIMER_IMAGE_VERSION=${RECLAIMER_VERSION}

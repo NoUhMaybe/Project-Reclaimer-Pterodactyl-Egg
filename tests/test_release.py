@@ -79,7 +79,7 @@ class ReleaseTests(unittest.TestCase):
     def test_release_and_upstream_identity(self):
         values = check_release.validate(self.root)
         self.assertEqual(values["version"], (ROOT / "VERSION").read_text().strip())
-        self.assertEqual(values["upstream"], "0.9.20")
+        self.assertEqual(values["upstream"], "0.9.21")
         self.assertEqual(values["prerelease"], "false")
         self.assertTrue(values["image"].endswith(":" + values["version"]))
 
@@ -95,9 +95,11 @@ class ReleaseTests(unittest.TestCase):
 
     def test_unsupported_pin_and_invalid_release_version_are_rejected(self):
         original = (self.root / "Dockerfile").read_text(encoding="utf-8")
-        (self.root / "Dockerfile").write_text(original.replace("ARG RECLAIMER_VERSION=0.9.20", "ARG RECLAIMER_VERSION=latest"), encoding="utf-8")
-        with self.assertRaises(ValueError):
-            check_release.validate(self.root)
+        for pin in ("0.9.20", "latest"):
+            with self.subTest(pin=pin):
+                (self.root / "Dockerfile").write_text(original.replace("ARG RECLAIMER_VERSION=0.9.21", "ARG RECLAIMER_VERSION=" + pin), encoding="utf-8")
+                with self.assertRaisesRegex(ValueError, "Reviewed upstream pin"):
+                    check_release.validate(self.root)
         (self.root / "Dockerfile").write_text(original, encoding="utf-8")
         (self.root / "VERSION").write_text("latest\n", encoding="utf-8")
         with self.assertRaises(ValueError):
@@ -152,7 +154,7 @@ class ReleaseTests(unittest.TestCase):
                        "org.opencontainers.image.source": "https://github.com/" + check_release.REPOSITORY,
                        "org.opencontainers.image.version": values["version"]},
             "Entrypoint": ["/usr/bin/tini", "--", "/pterodactyl/entrypoint.sh"], "Cmd": ["start"],
-            "Env": ["RECLAIMER_IMAGE_VERSION=0.9.20"]}}
+            "Env": ["RECLAIMER_IMAGE_VERSION=0.9.21"]}}
         registry = MagicMock()
         def supply(value):
             raw = json.dumps(value).encode()

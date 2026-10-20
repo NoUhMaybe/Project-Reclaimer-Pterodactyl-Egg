@@ -1,9 +1,9 @@
-"""Version gates checked against the 0.9.20 executable and versioned references."""
+"""Version gates checked through the 0.9.21 executable and versioned references."""
 import re
 
 
 class Capabilities:
-    def __init__(self, version="0.9.20"):
+    def __init__(self, version="0.9.21"):
         self.version = version
         match = re.fullmatch(r"v?(\d+)\.(\d+)\.(\d+)", version)
         self.number = tuple(map(int, match.groups())) if match else (0, 0, 0)

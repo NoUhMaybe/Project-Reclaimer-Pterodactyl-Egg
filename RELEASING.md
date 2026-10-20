@@ -5,7 +5,7 @@ or deploy. Merge, tag creation, GitHub Release publication and any server test n
 the owner's explicit approval. This maintenance task only prepares and validates
 a PR. The current candidate is **egg v0.1.2**, using
 `ghcr.io/nouhmaybe/project-reclaimer-pterodactyl:v0.1.2`.
-Keep the upstream server and required client at **0.9.20**.
+Keep the upstream server and required client at **0.9.21**.
 
 ## Existing identifiers: 2026-10-19 audit
 
@@ -54,7 +54,7 @@ this runbook supplies no automatic destructive reconciliation commands.
    Docker build and runtime A/B/C/E/F. Without local Docker, wait for those CI jobs.
 4. Inspect local and remote tag refs and anonymously check the corresponding GHCR
    manifest. Both identifiers must be unused for a new corrected release. Record
-   the exact main SHA, VERSION, upstream 0.9.20 and JSON SHA256. These must agree.
+   the exact main SHA, VERSION, upstream 0.9.21 and JSON SHA256. These must agree.
 
 ## Approved publication only
 
@@ -71,7 +71,7 @@ this runbook supplies no automatic destructive reconciliation commands.
 
 2. The tag push starts Publish image to GHCR. Alternatively, if the approved tag
    already exists at that exact source and its image is still absent, manually run
-   publish.yml from that tag with release_tag=<VERSION>, reclaimer_version=0.9.20,
+   publish.yml from that tag with release_tag=<VERSION>, reclaimer_version=0.9.21,
    tag_latest=false and empty test_tag/source_sha. Do not retry once an image exists.
 3. Watch the preflight, complete tests, build, runtime tests and push. Preflight
    compares the Git tag, VERSION, JSON, canonical installer, source SHA and upstream
@@ -84,7 +84,7 @@ this runbook supplies no automatic destructive reconciliation commands.
 5. Only after image verification and release approval, create the GitHub Release
    using the already approved tag. Do not let GitHub create a tag from a guessed
    target branch. Use the title Project Reclaimer Pterodactyl Egg v0.1.2 — Reclaimer
-   v0.9.20. Paste RELEASE-NOTES.md as GitHub-flavored Markdown; no HTML.
+   v0.9.21. Paste RELEASE-NOTES.md as GitHub-flavored Markdown; no HTML.
 
 ## JSON attachment and download verification
 
@@ -122,7 +122,7 @@ image and settings, then exporting the egg from an actual Panel and comparing it
 ## Approved fresh-install acceptance
 
 On a separate authorized test server, verify a genuinely empty installation mount,
-upload owned Halo 3 assets, confirm correct persistent layout, matching .20 clients,
+upload owned Halo 3 assets, confirm correct persistent layout, matching .21 clients,
 raw RCON/menu, LAN/WAN multiplayer and graceful Stop/Restart. Reinstall and compare
 assets, bans, playlists and administrator configuration. Follow WINGS-VALIDATION.md
 for the full checklist. Do not touch production servers as part of release preparation.

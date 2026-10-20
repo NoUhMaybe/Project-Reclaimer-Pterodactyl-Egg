@@ -11,12 +11,12 @@ community-developed Halo 3 dedicated multiplayer server — under
 | Component | Prepared version |
 | --- | --- |
 | Pterodactyl Egg | v0.1.2 |
-| Project Reclaimer Dedicated Server | v0.9.20 |
-| Required Project Reclaimer Client | v0.9.20 |
+| Project Reclaimer Dedicated Server | v0.9.21 |
+| Required Project Reclaimer Client | v0.9.21 |
 | Docker Architecture | linux/amd64 |
 
 The egg version and upstream server version are independent. Clients must match
-the dedicated server's exact **0.9.20** version. `VERSION` defines the egg/image
+the dedicated server's exact **0.9.21** version. `VERSION` defines the egg/image
 version; Dockerfile pins upstream separately. This maintenance candidate is not
 a newly published release. It targets v0.1.2 while preserving the existing
 v0.1.1 tag/image, which refer to older source. [Release instructions](RELEASING.md)
@@ -176,13 +176,13 @@ docker build -t project-reclaimer-pterodactyl:local .
 ```
 
 The `RECLAIMER_VERSION` build arg pins the upstream base image tag (default
-`0.9.20`, confirmed to exist via a live registry query against
+`0.9.21`, confirmed to exist via a live registry query against
 `ghcr.io/projectreclaimer/project-reclaimer-dedicated` — see
 [tests/test_dockerfile.py](tests/test_dockerfile.py), which re-checks this
 automatically in CI):
 
 ```bash
-docker build --build-arg RECLAIMER_VERSION=0.9.20 -t project-reclaimer-pterodactyl:0.9.20 .
+docker build --build-arg RECLAIMER_VERSION=0.9.21 -t project-reclaimer-pterodactyl:0.9.21 .
 ```
 
 Point your own server's egg Docker Image field at whatever you build/push —
@@ -281,16 +281,16 @@ Playlists can be created, edited, validated, copied, activated and restored from
 backups entirely through console input. Persistent operations use a separate
 filesystem backend; live actions use local RCON. Explicit manager overrides win
 over Startup defaults when generated for Apply/startup and can be reset through the menu.
-The current server pin is **0.9.20**. Native playlist creation/validation,
+The current server pin is **0.9.21**. Native playlist creation/validation,
 content discovery, admin/pardon, configuration reload and camera policy extend
 the same manager. Settings stay pending until explicit Apply/reload or startup;
 the server's reply describes immediate/next-game/idle timing. Mods still require
-restart. Clients must match 0.9.20 exactly; automatic updates stay disabled by default.
-See [the compatibility assessment](UPSTREAM-0.9.20.md) and
+restart. Clients must match 0.9.21 exactly; automatic updates stay disabled by default.
+See [the compatibility assessment](UPSTREAM-0.9.21.md) and
 [per-version matrix](CAPABILITIES.md). The release egg/image version is defined
 separately in `VERSION`.
 
-The approved experimental publication path uses the existing manual workflow on
+The historical 0.9.20 experimental publication path uses the existing manual workflow on
 `feature/console-manager-upstream-0.9.20`, an exact source SHA, upstream `0.9.20`,
 `tag_latest=false`, and an unused `console-manager-pr5-reclaimer-0.9.20-test.N`
 tag. It requires all seven CI jobs, rejects forks/existing tags, checks every

@@ -3,10 +3,13 @@
 Automated tests use mock services and temporary files. They do not establish Halo
 gameplay, WAN connectivity, multi-client correctness or actual mod compatibility.
 Run this checklist on a separately approved test deployment before production.
-This task authorizes an isolated experimental image, not deployment, merge or
-stable release. Gameplay tests below remain unperformed until operator approval.
+The current candidate pins 0.9.21. Use a validated build from the reviewed
+source or the matching published release image described in [RELEASING.md](RELEASING.md),
+and match 0.9.21 clients. Gameplay tests below remain unperformed until operator
+approval. The older .20 image procedure below is retained as historical context;
+it does not select the current .21 candidate.
 
-## Select the isolated 0.9.20 image on a separate test server
+## Historical isolated 0.9.20 image procedure
 
 Publishing a test image does not authorize deployment. The operator selects it
 manually on a separate Pterodactyl server; do not change the working server.
@@ -55,18 +58,18 @@ to the Actions run. No GitHub Release, main merge, release tag or deployment occ
   a WAN client, raw RCON, game logs and graceful Stop/Start. These are mandatory
   regressions; a manager feature is not accepted if any fail.
 - Use owned game assets and version-matched clients. The default pin remains
-  0.9.20 on this branch; the existing .13 image stays available for rollback.
+  0.9.21 on this branch; the existing .13 image stays available for rollback.
 - After separate deployment approval, build a local test tag from this branch
   without pushing it. Use a test allocation/server, not the production match.
 
-## Dedicated 0.9.20 upgrade acceptance record
+## Dedicated 0.9.21 upgrade acceptance record
 
 Record pass/fail and redacted evidence for each item. These are pending live
 checks, not automated-test claims. Test migration with a **copy** of the original
 .13 wrapper's TOML, version-1 overrides, version-2 playlists and mod switches;
 compare unmanaged settings and data before/after two restarts.
 
-1. [ ] Fresh startup under Wings' assigned non-root UID reaches a playable .20 server.
+1. [ ] Fresh startup under Wings' assigned non-root UID reaches a playable .21 server.
 2. [ ] Persistent prefix initializes with correct ownership, then survives recreation.
 3. [ ] Owned Halo 3 assets validate; existing assets and content remain intact.
 4. [ ] All eight menu categories, back/cancel/refresh/help and exit work via input field.

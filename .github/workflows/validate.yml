@@ -43,15 +43,16 @@ jobs:
       - name: Run full unit test suite
         run: python -m unittest discover -s tests -v
 
-      - name: Verify official 0.9.13 and 0.9.20 CLI contracts (Windows, no game assets)
+      - name: Verify official 0.9.13, 0.9.20 and 0.9.21 CLI contracts (Windows, no game assets)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           $checksums = @{
             '0.9.13' = 'afe11ddc1bd57b451f668e820d4236c1eea44798fff365eecd680d6dc8122a91'
             '0.9.20' = 'e0d0861b265109cd623e2c991b63c60f08512bca2ae2bc028cb0af996c7bfe3d'
+            '0.9.21' = 'f7c2c29a6eb82077cdbe2bf75e09cfb779326de469348556fa7232ae1e9712ab'
           }
-          foreach ($version in @('0.9.13', '0.9.20')) {
+          foreach ($version in @('0.9.13', '0.9.20', '0.9.21')) {
             $binary = Join-Path $env:RUNNER_TEMP "project-reclaimer-dedicated-v$version.exe"
             Invoke-WebRequest "https://github.com/ProjectReclaimer/project-reclaimer-releases/releases/download/v$version/project-reclaimer-dedicated-v$version.exe" -OutFile $binary
             if ((Get-FileHash -LiteralPath $binary -Algorithm SHA256).Hash.ToLowerInvariant() -ne $checksums[$version]) { throw 'Upstream CLI checksum mismatch' }

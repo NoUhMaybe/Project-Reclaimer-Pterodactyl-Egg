@@ -11,6 +11,7 @@ Run from the repository root:
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -44,6 +45,11 @@ def build(root=None) -> dict:
     install_script = (root / "scripts" / "install.sh").read_text(encoding="utf-8")
     version = (root / "VERSION").read_text(encoding="utf-8").strip()
     image = "ghcr.io/nouhmaybe/project-reclaimer-pterodactyl:" + version
+    upstream = re.search(r"^ARG RECLAIMER_VERSION=(\S+)\s*$",
+                         (root / "Dockerfile").read_text(encoding="utf-8"), re.M)
+    if upstream is None:
+        raise ValueError("Dockerfile must pin RECLAIMER_VERSION.")
+    upstream_version = upstream.group(1)
 
     variables = [
         variable(
@@ -155,7 +161,8 @@ def build(root=None) -> dict:
         "description": (
             "Community-developed Halo 3 dedicated multiplayer server (Project Reclaimer), "
             "run via a thin Pterodactyl-compatibility wrapper around the official "
-            "ghcr.io/projectreclaimer/project-reclaimer-dedicated image. Requires your own "
+            f"ghcr.io/projectreclaimer/project-reclaimer-dedicated:{upstream_version} image. "
+            f"Clients must match {upstream_version} exactly. Requires your own "
             "legally-owned Halo 3 (MCC) game files; none are included. See "
             "https://projectreclaimer.dev/host for upstream documentation and "
             "https://github.com/NoUhMaybe/Project-Reclaimer-Pterodactyl-Egg for this egg."

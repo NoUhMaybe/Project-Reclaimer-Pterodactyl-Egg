@@ -1,4 +1,4 @@
-# Project Reclaimer Pterodactyl Egg v0.1.2 — Reclaimer v0.9.20
+# Project Reclaimer Pterodactyl Egg v0.1.2 — Reclaimer v0.9.21
 
 Prepared maintenance notes; v0.1.2 has not been published by this repair task.
 The candidate uses a new patch version while preserving the earlier v0.1.1 Git
@@ -7,10 +7,13 @@ tag and image. See RELEASING.md for the approved publication procedure.
 | Component | Version |
 | --- | --- |
 | Pterodactyl Egg | v0.1.2 (prepared candidate) |
-| Project Reclaimer Dedicated Server | v0.9.20 |
-| Required Project Reclaimer Client | v0.9.20 |
+| Project Reclaimer Dedicated Server | v0.9.21 |
+| Required Project Reclaimer Client | v0.9.21 |
 | Architecture | linux/amd64 |
 
+- Updates the upstream server from 0.9.20 to [0.9.21](https://github.com/ProjectReclaimer/project-reclaimer-releases/releases/tag/v0.9.21).
+  Players must also use 0.9.21. The existing console, persistent layout and
+  process supervision are retained; see [the compatibility audit](UPSTREAM-0.9.21.md).
 - The installer creates the server directory before entering it, allowing a
   genuinely empty persistent mount to initialize. Reinstallation preserves
   uploaded assets, bans, playlists, administrator configuration and manager data.

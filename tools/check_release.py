@@ -22,7 +22,7 @@ def validate(root=ROOT):
             "VERSION must contain an explicit semantic release tag, e.g. v0.1.2.")
     text = (root / "Dockerfile").read_text(encoding="utf-8")
     match = re.search(r"^ARG RECLAIMER_VERSION=(\S+)\s*$", text, re.M)
-    require(match and match.group(1) == "0.9.20", "Reviewed upstream pin must remain 0.9.20.")
+    require(match and match.group(1) == "0.9.21", "Reviewed upstream pin must remain 0.9.21.")
     raw = (root / "egg-project-reclaimer.json").read_bytes()
     actual = json.loads(raw)
     expected = build(root)

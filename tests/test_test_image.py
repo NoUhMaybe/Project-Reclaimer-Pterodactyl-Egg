@@ -24,7 +24,7 @@ class TestImageGuards(unittest.TestCase):
     def test_upgrade_branch_requires_its_own_version_and_tag_namespace(self):
         values = dict(ref=test_image.UPGRADE_BRANCH, upstream="0.9.20", tag="console-manager-pr5-reclaimer-0.9.20-test.1")
         self.assertEqual(self.inputs(**values), "console-manager-pr5-reclaimer-0.9.20-sha-" + SHA)
-        for changes in ({"upstream": "0.9.13"}, {"tag": "console-manager-pr5-test.2"}, {"ref": test_image.BRANCH}):
+        for changes in ({"upstream": "0.9.13"}, {"upstream": "0.9.21"}, {"tag": "console-manager-pr5-test.2"}, {"ref": test_image.BRANCH}):
             with self.assertRaises(ValueError):
                 self.inputs(**dict(values, **changes))
 
@@ -83,11 +83,13 @@ class TestImageGuards(unittest.TestCase):
         broken["config"]["Entrypoint"] = ["sh"]
         with self.assertRaises(ValueError):
             test_image.metadata(broken, SHA)
-        upgraded = copy.deepcopy(value)
-        upgraded["config"]["Env"] = ["RECLAIMER_IMAGE_VERSION=0.9.20"]
-        test_image.metadata(upgraded, SHA, "0.9.20")
-        with self.assertRaises(ValueError):
-            test_image.metadata(upgraded, SHA, "0.9.13")
+        for version in ("0.9.20", "0.9.21"):
+            with self.subTest(version=version):
+                upgraded = copy.deepcopy(value)
+                upgraded["config"]["Env"] = ["RECLAIMER_IMAGE_VERSION=" + version]
+                test_image.metadata(upgraded, SHA, version)
+                with self.assertRaises(ValueError):
+                    test_image.metadata(upgraded, SHA, "0.9.13")
 
     def test_existing_test_tag_aborts_before_snapshot_or_push(self):
         pr = {"state": "open", "merged": False, "head": {"repo": {"full_name": test_image.REPOSITORY}, "ref": "feature/console-manager", "sha": SHA}}
