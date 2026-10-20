@@ -4,13 +4,13 @@
         "version": "PTDL_v2",
         "update_url": null
     },
-    "exported_at": "2026-10-19T13:39:42+0000",
+    "exported_at": "2026-10-20T19:15:52+0000",
     "name": "Project Reclaimer",
     "author": "nouhmaybe@users.noreply.github.com",
-    "description": "Community-developed Halo 3 dedicated multiplayer server (Project Reclaimer), run via a thin Pterodactyl-compatibility wrapper around the official ghcr.io/projectreclaimer/project-reclaimer-dedicated image. Requires your own legally-owned Halo 3 (MCC) game files; none are included. See https://projectreclaimer.dev/host for upstream documentation and https://github.com/NoUhMaybe/Project-Reclaimer-Pterodactyl-Egg for this egg.",
+    "description": "Community-developed Halo 3 dedicated multiplayer server (Project Reclaimer), run via a thin Pterodactyl-compatibility wrapper around the official ghcr.io/projectreclaimer/project-reclaimer-dedicated:0.9.21 image. Clients must match 0.9.21 exactly. Requires your own legally-owned Halo 3 (MCC) game files; none are included. See https://projectreclaimer.dev/host for upstream documentation and https://github.com/NoUhMaybe/Project-Reclaimer-Pterodactyl-Egg for this egg.",
     "features": [],
     "docker_images": {
-        "ghcr.io/nouhmaybe/project-reclaimer-pterodactyl:v0.1.0": "ghcr.io/nouhmaybe/project-reclaimer-pterodactyl:v0.1.0"
+        "ghcr.io/nouhmaybe/project-reclaimer-pterodactyl:v0.1.2": "ghcr.io/nouhmaybe/project-reclaimer-pterodactyl:v0.1.2"
     },
     "file_denylist": [],
     "startup": "reclaimer-entrypoint start",

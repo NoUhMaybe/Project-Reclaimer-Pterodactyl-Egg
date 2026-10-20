@@ -1,4 +1,4 @@
-"""0.9.13 state migration and 0.9.20 native/reload/UI contracts."""
+"""0.9.13 state migration and current native/reload/UI contracts."""
 import copy
 import json
 import os
@@ -21,9 +21,9 @@ from test_manager import Fixture, MAPS, MODES, rotation
 class UpgradeTests(Fixture):
     def setUp(self):
         super().setUp()
-        self.live.capabilities = Capabilities("0.9.20")
+        self.live.capabilities = Capabilities("0.9.21")
         self.native = MagicMock(spec=NativeTools)
-        self.native.version.return_value = "project-reclaimer 0.9.20"
+        self.native.version.return_value = "project-reclaimer 0.9.21"
         self.native.validate_playlist.return_value = "3 games checked"
         self.session.native = self.native
         self.playlists.native = self.native

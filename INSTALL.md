@@ -2,15 +2,24 @@
 
 ## 1. Obtain the published Docker image
 
-The exported egg targets `ghcr.io/nouhmaybe/project-reclaimer-pterodactyl:v0.1.0-dev.4`.
-This tag will become available when the corresponding prerelease is published.
-It is a testing release, not yet a stable version. You do **not** need to
-build the image yourself to install the egg once the tag has been published.
+Open the [latest published stable release](https://github.com/NoUhMaybe/Project-Reclaimer-Pterodactyl-Egg/releases/latest)
+and use its validated `egg-project-reclaimer.json` attachment when available.
+Source-code archives are not the standalone egg attachment. If an attachment is
+missing, report it or use the JSON from that exact release tag; do not substitute
+a development egg. The older v0.1.0 release currently lacks its promised attachment.
+
+This maintenance branch prepares **egg v0.1.2**, selecting
+`ghcr.io/nouhmaybe/project-reclaimer-pterodactyl:v0.1.2`, with **server and client
+0.9.21**, on **linux/amd64**. The earlier v0.1.1 tag/image remain published from
+older source, while its GitHub Release was deleted. Preserve those identifiers;
+the corrected candidate uses v0.1.2. Complete [RELEASING.md](RELEASING.md)
+before using a newly released candidate. No local Docker build is required for
+a validated published image.
 
 Advanced users can build an image with `docker build -t project-reclaimer-pterodactyl:local .`.
-This upgrade branch pins the upstream base image to 0.9.20. Existing egg image
-defaults are unchanged. Use exact version-matched 0.9.20 clients for an approved
-upgrade test; preserve the .13 test image/configuration for rollback.
+The upstream base image is pinned to 0.9.21. Use exact version-matched
+0.9.21 clients, and back up the existing image selection and configuration before
+an approved upgrade test.
 See [the publishing workflow](.github/workflows/publish.yml) for tagged releases.
 
 ## 2. Import the egg into Pterodactyl Panel
@@ -19,8 +28,8 @@ See [the publishing workflow](.github/workflows/publish.yml) for tagged releases
    create a new one (e.g. "Game Servers").
 2. Open the Nest, click **Import Egg**, and upload
    [`egg-project-reclaimer.json`](egg-project-reclaimer.json).
-3. Open the imported egg and edit its **Docker Images** field to whichever
-   image you built/published in step 1.
+3. Confirm **Docker Images** matches the validated release's immutable version
+   reference. Do not leave a stale development tag selected.
 4. Review the **Variables** tab — defaults are sensible for a small
    open server, but confirm nothing conflicts with your setup.
 
@@ -110,7 +119,7 @@ output itself to confirm the server is actually up.
 
 ## 6. Connect with a Halo 3 client
 
-Use a Project Reclaimer client matching the server's exact version (0.9.20 for
+Use a Project Reclaimer client matching the server's exact version (0.9.21 for
 this branch), open the **Server Browser**, and look for
 your server's name (public servers appear automatically within about a
 minute of starting, via the project's public master servers). Alternatively
@@ -149,6 +158,14 @@ than immediately loading it. `startvote playlist` requires an active playlist.
 
 The normal Stop and Start buttons were verified on Wings with `v0.1.0-dev.3`.
 Only administrators with console access should have command privileges.
+
+## Panel export for a community catalog contribution
+
+The release JSON is generated from repository source; it is not a Panel export.
+After importing the corrected release into a test Nest, review its image,
+Startup, Variables and install script, save it, then use the egg's **Export**
+action in Panel. Compare that exported file against the release JSON, ignoring
+only export metadata. Use the actual Panel export for the catalog requirement.
 
 ## Verified deployment and remaining limitations
 

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Real bundled 0.9.20 executable under Wine, disposable non-root storage.
+# Real bundled 0.9.21 executable under Wine, disposable non-root storage.
 # No game assets: prove command availability, version, parser and failure safety;
 # successful playlist validation/authoring still requires live owned assets.
 set -euo pipefail
@@ -17,15 +17,15 @@ docker run --rm --user root --entrypoint chown \
 docker run --rm -i --user 2002:2002 --entrypoint bash \
     -v "$WORKDIR/home-container:/home/container" "$IMAGE" -s <<'SCRIPT'
 set -euo pipefail
-test "$RECLAIMER_IMAGE_VERSION" = 0.9.20
+test "$RECLAIMER_IMAGE_VERSION" = 0.9.21
 # Match entrypoint.sh's existing non-root ownership fix when bypassing it here.
 export WINEPREFIX=/home/container/.wine-prefix
 # The image bundles a distinct build from the downloadable Windows release asset.
-# Verified directly from the official .20 manifest's executable layer.
-printf '%s  %s\n' 15c2b745e2c7dd1563a69f9fa09ba399ac3702eb3da200afa8d42d9a271f03d7 /opt/reclaimer/project-reclaimer.exe | sha256sum --check
+# Verified directly from the official .21 manifest's executable layer.
+printf '%s  %s\n' c288e36a69f59c4cd54fe21332ecd9c53257c36be1d633e46b4b07c773ac0760 /opt/reclaimer/project-reclaimer.exe | sha256sum --check
 reclaimer-entrypoint prepare-prefix
 version=$(timeout 45 project-reclaimer --version | tr -d '\r')
-test "$version" = 'project-reclaimer 0.9.20'
+test "$version" = 'project-reclaimer 0.9.21'
 echo "Actual bundled executable: $version"
 for command in 'playlist new' 'playlist show' content reload; do
     # Intentional splitting: these are fixed command words, never operator input.
@@ -40,7 +40,7 @@ from manager.native import NativeTools
 
 root = Path('/home/container/server')
 native = NativeTools(root)
-assert native.version() == 'project-reclaimer 0.9.20'
+assert native.version() == 'project-reclaimer 0.9.21'
 candidate = {'version': 2, 'name': 'Probe', 'vote_seconds': 20,
              'games': [{'map': 'Guardian', 'game': 'Slayer'}] * 3}
 try:
@@ -54,4 +54,4 @@ assert list((root / '.manager/staging').iterdir()) == []
 print('Real native validation failed safely without assets; private staging cleaned.')
 PY
 SCRIPT
-echo 'PASS: Test F - actual 0.9.20 bundled checksum/version, CLI availability and safe native failure under Wine.'
+echo 'PASS: Test F - actual 0.9.21 bundled checksum/version, CLI availability and safe native failure under Wine.'

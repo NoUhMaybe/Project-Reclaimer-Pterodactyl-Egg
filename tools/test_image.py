@@ -165,7 +165,8 @@ def metadata(config, sha, upstream="0.9.13"):
     require(runtime["Labels"]["org.opencontainers.image.source"] == "https://github.com/" + REPOSITORY, "Unexpected image source.")
     require(runtime["Entrypoint"] == ["/usr/bin/tini", "--", "/pterodactyl/entrypoint.sh"], "tini startup changed.")
     require(runtime["Cmd"] == ["start"], "Upstream startup command changed.")
-    require(upstream in {value[0] for value in TARGETS.values()}, "Unexpected upstream pin.")
+    # Shared with stable release verification; experimental TARGETS stay fixed.
+    require(upstream in {value[0] for value in TARGETS.values()} | {"0.9.21"}, "Unexpected upstream pin.")
     require("RECLAIMER_IMAGE_VERSION=" + upstream in runtime["Env"], "Upstream version changed.")
 
 

@@ -84,7 +84,7 @@ are shared between processes.
 
 RCON stays loopback-only inside the container. The local CLI discovers its
 credentials/host key from upstream files; they are not passed as argv flags.
-The actual 0.9.13 and 0.9.20 CLIs were tested against a fake WebSocket endpoint: each sends its
+The actual 0.9.13, 0.9.20 and 0.9.21 CLIs were tested against a fake WebSocket endpoint: each sends its
 argv as `command` plus structured `args`, so the original bridge's `shlex.split`
 approach is retained. Never join tokens into one CLI argument: the CLI treats
 that as a command name. There is no shell interpolation in menu operations.
@@ -100,6 +100,7 @@ Panel configuration, outside menu input handling. No new general shell executor,
 network service or automatic Workshop installer is added. The isolated .20
 publication uses the existing guarded manual workflow; it does not deploy.
 
-The .13/.20 upstream entrypoint scripts are byte-identical, with matching
-metadata/permissions/layout contracts. See [the audit](UPSTREAM-0.9.20.md) and
+The .13/.20 upstream entrypoint scripts are byte-identical, and .21 retains
+all .20 filesystem layers except the bundled executable. The metadata and layout
+contracts are unchanged. See [the current audit](UPSTREAM-0.9.21.md) and
 [capability matrix](CAPABILITIES.md).

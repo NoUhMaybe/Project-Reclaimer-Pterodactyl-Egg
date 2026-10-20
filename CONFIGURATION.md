@@ -206,10 +206,10 @@ server's storage is wiped (e.g. a full reinstall).
   playlists, bans and uploaded assets are preserved. The upstream entrypoint
   refreshes its writable executable when the image's bundled hash changes.
 
-## 0.9.20 persistent settings and reload
+## Persistent settings and reload (0.9.20+)
 
 The version-1 overrides schema and version-2 playlist format are unchanged.
-New guided keys are `friendly_fire`, `welcome` (empty clears), `voice_global`,
+Guided keys are `friendly_fire`, `welcome` (empty clears), `voice_global`,
 `voice_team`, `voice_proximity`, `load_timeout`, `trust_player_games` and `camera`.
 Camera choices: `first_person`, `player_choice`, `third_person`; next multiplayer
 game after reload. Campaign co-op/Firefight, vehicle views and modes with fixed
@@ -231,7 +231,7 @@ captured at process launch, so changes there still require container restart.
 | Explicit container restart | mod replacement/enable/disable, Startup environment changes |
 
 Password/port/path changes remain in Startup/admin files, not console prompts.
-Clients must match .20 exactly. Automatic updates remain false by default.
+Clients must match 0.9.21 exactly. Automatic updates remain false by default.
 Back up TOML/overrides before testing; restore both before returning to the .13
 image, because its wrapper rejects new override keys. See
 [the recorded rollback image and digest](UPSTREAM-0.9.20.md#preserved-rollback).
